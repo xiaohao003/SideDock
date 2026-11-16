@@ -101,26 +101,20 @@ struct ShelfBarView: View {
                minHeight: state.settings.shelfBarFrame.height)
         .background(ShelfBarBackground())
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 }
 
-/// 玻璃背景(取景模糊 + 品牌蓝渐变 tint + 内顶高光 + 白描边,保证白字对比)
+/// 渐变背景(证据: initWithStartingColor:endingColor: NSGradient)
 struct ShelfBarBackground: View {
     var body: some View {
-        ZStack {
-            VisualEffectBackground(dark: true)
-            LinearGradient(
-                colors: [
-                    Color(red: 0.16, green: 0.47, blue: 0.86),
-                    Color(red: 0.10, green: 0.62, blue: 0.70),
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            .opacity(0.88)
-            LinearGradient(colors: [Color.white.opacity(0.28), Color.clear],
-                           startPoint: .top, endPoint: .center)
-        }
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.white.opacity(0.25)))
+        LinearGradient(
+            colors: [
+                Color(red: 0.16, green: 0.47, blue: 0.86),
+                Color(red: 0.10, green: 0.62, blue: 0.70),
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+        .opacity(0.92)
     }
 }

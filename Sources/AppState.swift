@@ -170,9 +170,10 @@ final class UIState: ObservableObject {
     @Published var vaultEditPassword = ""
     // 待办:到期预设 + 分组筛选 + 输入
     @Published var todoDraft = ""
-    @Published var todoPreset: Int = 0   // 0 无 1 今日 2 明日 3 一周
+    @Published var todoPreset: Int = 1   // 1 今日(默认,渲染证据) 2 明日 3 一周
     @Published var todoFilter: Int = 1   // 0 全部 1 今日 2 明日 3 一周 4 历史(已完成)
-    @Published var todoHover: [UUID: Bool] = [:]   // 行悬停态(命令行工具链无 @State 宏插件)
+    @Published var todoHover: [UUID: Bool] = [:]   // 行悬停态(悬停才显示删除按钮)
+    @Published var notesHover: [UUID: Bool] = [:]  // 笔记卡悬停态(同上)
     // 剪贴板(Maccy 式交互状态)
     @Published var clipboardCopiedID: UUID?
     @Published var clipSearch = ""
@@ -222,6 +223,8 @@ final class AppState: ObservableObject {
     }
 
     func persistSettings() {
+        // promoshot 渲染模式不落盘:与正式实例共用 defaults 域,避免渲染期改写用户设置
+        if ProcessInfo.processInfo.environment["SIDEDOCK_PROMOSHOT"] != nil { return }
         if let data = try? JSONEncoder().encode(settings) {
             defaults.set(data, forKey: Self.settingsKey)
         }
@@ -240,57 +243,38 @@ final class AppState: ObservableObject {
     }
 }
 
-// MARK: - 主题(玻璃主题色板 · 与 Open Design 设计稿 tokens 一一对应)
-// 设计稿:.open-design/sidedock-macos-glassmorphism-12-96pt-472-519pt-sd-44-44-5-ta/
-// 玻璃层级 = NSVisualEffectView 真实取景模糊(面板底)+ 半透明 tint 叠加 + 发丝描边 + 顶部内侧高光
+// MARK: - 主题(渲染图取色)
 
 struct ThemeColors {
-    let isDark: Bool
-    let bg: Color          // 面板玻璃 tint(叠加在 NSVisualEffectView 之上;再乘 backgroundOpacity)
-    let card: Color        // 内容卡片玻璃层
-    let cardHover: Color   // 内容卡片悬停层(亮度 +12%)
-    let bar: Color         // Tab 容器 / 分段控件玻璃底
+    let bg: Color          // 面板卡片底
+    let card: Color        // 内容卡片
+    let bar: Color         // Tab 容器底
     let pill: Color        // 未选中胶囊
     let text: Color
     let text2: Color
     let text3: Color
     let accent: Color
     let accent2: Color
-    let accentSoft: Color  // 徽章底 / 激活态玻璃
     let danger: Color
-    let warn: Color        // 下载中
-    let border: Color      // 发丝描边(卡片/容器共用)
-    let panelHighlight: Color // 面板顶部内侧高光
-    let panelBorderOut: Color // 面板外描边
+    let border: Color
 }
 
 enum Theme {
+    // 色值取自原版 --promoshot 渲染图逐点取样(见 /tmp 对比记录):
+    // 浅色 bg #F7F7F7 卡 #ECECEC chip #DCDCDC 选中渐变 #63A3FC→#32BFF1
+    // 深色 bg #1C1C1F 卡 #262629 chip #363639
     static func colors(dark: Bool) -> ThemeColors {
         dark
         ? ThemeColors(
-            isDark: true,
-            bg: Color(hex: 0x16181F, alpha: 0.58),
-            card: Color(hex: 0xFFFFFF, alpha: 0.075), cardHover: Color(hex: 0xFFFFFF, alpha: 0.12),
-            bar: Color(hex: 0xFFFFFF, alpha: 0.06), pill: Color(hex: 0xFFFFFF, alpha: 0.08),
-            text: Color(hex: 0xF2F4F8), text2: Color(hex: 0xA8B0BD), text3: Color(hex: 0x6C7480),
-            accent: Color(hex: 0x4A8DFF), accent2: Color(hex: 0x3B7BE8),
-            accentSoft: Color(hex: 0x4A8DFF, alpha: 0.22),
-            danger: Color(hex: 0xFF6B61), warn: Color(hex: 0xF5A623),
-            border: Color(hex: 0xFFFFFF, alpha: 0.10),
-            panelHighlight: Color(hex: 0xFFFFFF, alpha: 0.10),
-            panelBorderOut: Color(hex: 0x000000, alpha: 0.40))
+            bg: Color(hex: 0x1C1C1F), card: Color(hex: 0x262629), bar: Color(hex: 0x262629),
+            pill: Color(hex: 0x363639), text: Color(hex: 0xE8E8EA), text2: Color(hex: 0x9A9AA0),
+            text3: Color(hex: 0x6E6E74), accent: Color(hex: 0x4A8DFF), accent2: Color(hex: 0x32BFF1),
+            danger: Color(hex: 0xE5534B), border: Color(hex: 0x3A3A3E))
         : ThemeColors(
-            isDark: false,
-            bg: Color(hex: 0xF8FAFD, alpha: 0.72),
-            card: Color(hex: 0xFFFFFF, alpha: 0.55), cardHover: Color(hex: 0xFFFFFF, alpha: 0.72),
-            bar: Color(hex: 0x0F172A, alpha: 0.055), pill: Color(hex: 0x0F172A, alpha: 0.05),
-            text: Color(hex: 0x1C1C1E), text2: Color(hex: 0x555B66), text3: Color(hex: 0x8A909C),
-            accent: Color(hex: 0x3B82F6), accent2: Color(hex: 0x2B6BFF),
-            accentSoft: Color(hex: 0x3B82F6, alpha: 0.14),
-            danger: Color(hex: 0xE5484D), warn: Color(hex: 0xE8890C),
-            border: Color(hex: 0xFFFFFF, alpha: 0.62),
-            panelHighlight: Color(hex: 0xFFFFFF, alpha: 0.65),
-            panelBorderOut: Color(hex: 0x0F172A, alpha: 0.10))
+            bg: Color(hex: 0xF7F7F8), card: Color(hex: 0xECECEC), bar: Color(hex: 0xECECEC),
+            pill: Color(hex: 0xDCDCDC), text: Color(hex: 0x1C1C1E), text2: Color(hex: 0x6B6E75),
+            text3: Color(hex: 0x9CA3AF), accent: Color(hex: 0x3B82F6), accent2: Color(hex: 0x32BFF1),
+            danger: Color(hex: 0xE5484D), border: Color(hex: 0xE0E0E4))
     }
 }
 

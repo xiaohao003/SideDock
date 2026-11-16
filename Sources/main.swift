@@ -68,16 +68,108 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           sourceBundle: "com.tencent.xinWeChat", sourceName: "微信"),
             ]
         }
-        let tabs: [PanelTab] = [.todo, .notes, .downloads, .shelf, .passwords]
+        // 与原版 --promoshot 输出同款 8 张(证据:原版输出文件集
+        // panel-{todo,shelf}-{light,dark} + notes/downloads/passwords/shelf-clip-light)。
+        // 主题强制按每张固定,不读用户已存设置(否则共享 defaults 域会把渲染带偏)。
+        let jobs: [(file: String, tab: PanelTab, dark: Bool, clip: Bool)] = [
+            ("panel-todo-light.png",       .todo,      false, false),
+            ("panel-todo-dark.png",        .todo,      true,  false),
+            ("panel-notes-light.png",      .notes,     false, false),
+            ("panel-downloads-light.png",  .downloads, false, false),
+            ("panel-passwords-light.png",  .passwords, false, false),
+            ("panel-shelf-light.png",      .shelf,     false, false),
+            ("panel-shelf-dark.png",       .shelf,     true,  false),
+            ("panel-shelf-clip-light.png", .shelf,     false, true),
+        ]
+        let savedSettings = state.settings
+        // 演示数据对齐原版 promoshot(仅渲染用;JSON 落在隔离的 SIDEDOCK_DATA_DIR,
+        // 密码只注入内存条目、不写钥匙串)
+        if state.todos.items.isEmpty {
+            let cal = Calendar.current
+            let day = cal.startOfDay(for: Date())
+            func at(_ h: Int, _ m: Int, days: Int = 0) -> Date {
+                cal.date(byAdding: DateComponents(day: days, hour: h, minute: m), to: day)!
+            }
+            let now = Date()
+            state.todos.items = [
+                TodoItem(title: "提交季度报销单", due: at(9, 0), createdAt: now),
+                TodoItem(title: "给妈妈打视频电话", due: at(14, 8), createdAt: now),
+                TodoItem(title: "整理周会纪要要发到大群", due: at(18, 0), createdAt: now),
+                TodoItem(title: "回复客户邮件", due: at(19, 30), createdAt: now),
+                TodoItem(title: "给设计稿补标注", due: at(10, 0, days: 1)),
+                TodoItem(title: "预约年度体检", due: at(11, 0, days: 1)),
+                TodoItem(title: "复盘上线首周数据", due: at(10, 0, days: 3)),
+                TodoItem(title: "更新依赖到最新版本", due: at(15, 0, days: 3)),
+                TodoItem(title: "写月度 OKR 草稿", due: at(10, 0, days: 4)),
+                TodoItem(title: "处理发票报销", due: at(16, 0, days: 4)),
+                TodoItem(title: "清理测试设备", due: at(11, 0, days: 5)),
+                TodoItem(title: "回访 3 位种子用户", due: at(14, 0, days: 5)),
+                TodoItem(title: "准备分享会大纲", due: at(10, 0, days: 6)),
+                TodoItem(title: "检查自动备份任务", due: at(17, 0, days: 6)),
+                TodoItem(title: "确认新 Logo 定稿", due: at(12, 0, days: -1), done: true, doneAt: now),
+                TodoItem(title: "续费域名", due: at(12, 0, days: -2), done: true, doneAt: now),
+                TodoItem(title: "回复周末值班消息", due: at(12, 0, days: -3), done: true, doneAt: now),
+            ]
+        }
+        if state.notes.notes.isEmpty {
+            let now = Date()
+            state.notes.notes = [
+                Note(text: "周三晨会要点\n- 讲新版侧边栏的三个卖点\n- 收集大家的改进意见",
+                     createdAt: now.addingTimeInterval(-600)),
+                Note(text: "灵感：把宣传图的配色用到加载动画里", createdAt: now.addingTimeInterval(-86400)),
+                Note(text: "密码：家里 Wi-Fi 是 zhilan-2019（别外传）",
+                     createdAt: now.addingTimeInterval(-2 * 86400)),
+            ]
+        }
+        if state.vault.entries.isEmpty {
+            state.vault.entries = [
+                VaultEntry(site: "GitHub", account: "xiaohao-dev"),
+                VaultEntry(site: "工作邮箱", account: "xiaohao@company.com"),
+                VaultEntry(site: "NAS 管理后台", account: "admin"),
+            ]
+        }
+        if state.shelf.items.isEmpty {
+            // 造 6 个空演示文件,只为拿到文件类型图标
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SideDockPromo", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let names = ["年度总结.pptx", "合同扫描件.pdf", "设计素材包.zip",
+                         "会议纪要.md", "封面草图.png", "销售数据.xlsx"]
+            var items: [ShelfItem] = []
+            for name in names {
+                let url = dir.appendingPathComponent(name)
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    FileManager.default.createFile(atPath: url.path, contents: Data())
+                }
+                items.append(ShelfItem(path: url.path))
+            }
+            state.shelf.items = items
+        }
+        // 演示曲目(渲染证据:原版 promoshot 用蓝渐变占位封面 + 固定曲目)
+        state.music.snapshot = NowPlayingSnapshot(bundle: "com.tencent.QQMusic", app: "QQ音乐",
+                                                  playing: true, title: "晚风信箱",
+                                                  artist: "城市漫游者", album: "夜行车",
+                                                  duration: 227, elapsed: 96)
+        // 渲染尺寸对齐原版 promoshot(720×1280@2x = 360×640pt);expand 已发生过,重设几何
+        state.settings.panelWidth = 360
+        state.settings.panelHeight = 640
+        sidebar.applyGeometry(animated: false)
+
+        // 渲染期把窗口 appearance 跟着主题切,深色变体才画得对
+        func apply(_ job: (file: String, tab: PanelTab, dark: Bool, clip: Bool)) {
+            state.settings.themeIsDark = job.dark
+            state.settings.tab = job.tab
+            state.ui.shelfSegmentClips = job.clip
+            sidebar.panel.appearance = NSAppearance(named: job.dark ? .darkAqua : .aqua)
+        }
 
         func step(_ idx: Int) {
-            guard idx < tabs.count else {
+            guard idx < jobs.count else {
+                state.settings = savedSettings   // persist 在 promoshot 模式已被抑制
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
                 return
             }
-            let tab = tabs[idx]
-            state.settings.tab = tab
-            if tab == .shelf { state.ui.shelfSegmentClips = true }   // 渲染剪贴板段
+            apply(jobs[idx])
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 if let view = sidebar.panel.contentView, view.bounds.width > 50,
                    let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
@@ -90,9 +182,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     rep.size = view.bounds.size
                     view.cacheDisplay(in: view.bounds, to: rep)
                     if let png = rep.representation(using: .png, properties: [:]) {
-                        let url = URL(fileURLWithPath: outDir).appendingPathComponent("panel-\(tab.rawValue).png")
+                        let url = URL(fileURLWithPath: outDir).appendingPathComponent(jobs[idx].file)
                         try? png.write(to: url)
-                        print("[promoshot] wrote \(url.path)")
+                        print("[promoshot] 生成 \(jobs[idx].file) (\(rep.pixelsWide)×\(rep.pixelsHigh))")
                     }
                 }
                 step(idx + 1)

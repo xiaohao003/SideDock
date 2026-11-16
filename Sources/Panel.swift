@@ -36,60 +36,6 @@ final class SidebarPanel: NSPanel {
     }
 }
 
-// MARK: - 真实取景模糊(NSVisualEffectView)
-// 面板为透明 NSPanel(backgroundColor = .clear),behindWindow 模糊即真实毛玻璃透出桌面
-
-struct VisualEffectBackground: NSViewRepresentable {
-    let dark: Bool
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.isEmphasized = false
-        updateNSView(view, context: context)
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        // 浅色 .sidebar / 深色 .hudWindow:对应设计稿 blur 28(sat 180%)与 blur 30(sat 150%)的观感
-        view.material = dark ? .hudWindow : .sidebar
-    }
-}
-
-// MARK: - 玻璃面板背景(材质 + tint + 顶部内侧高光 + 发丝描边 + 双层投影)
-
-struct GlassPanelBackground: View {
-    let theme: ThemeColors
-    let opacityScale: Double   // 设置里的 backgroundOpacity,乘在 tint 上
-    var cornerRadius: CGFloat = 20
-
-    var body: some View {
-        ZStack {
-            VisualEffectBackground(dark: theme.isDark)
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(theme.bg.opacity(opacityScale))
-            // 顶部内侧高光(luminous edge)
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(LinearGradient(colors: [theme.panelHighlight, Color.clear],
-                                     startPoint: .top, endPoint: .center))
-                .allowsHitTesting(false)
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(theme.panelBorderOut, lineWidth: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(theme.border, lineWidth: 1)
-                .padding(0.5)
-        )
-        // 双层投影:环境影 + 接触影
-        .shadow(color: .black.opacity(theme.isDark ? 0.60 : 0.38), radius: 28, x: -6, y: 14)
-        .shadow(color: .black.opacity(theme.isDark ? 0.32 : 0.12), radius: 10, x: -2, y: 4)
-    }
-}
-
 // MARK: - 控制器
 
 final class SidebarController: ObservableObject {
@@ -259,7 +205,6 @@ struct PanelRootView: View {
 }
 
 // MARK: - 把手(观测:12pt 宽、96pt 高圆角竖条、握点、贴面板右缘)
-// 玻璃化:材质底 + 半透明填充 + 发丝描边;悬停提亮 / 拖放目标品牌蓝
 
 struct HandleColumn: View {
     @ObservedObject var controller: SidebarController
@@ -267,36 +212,21 @@ struct HandleColumn: View {
 
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
-    private var fill: Color {
-        if state.ui.handleDropTargeted { return theme.accent.opacity(0.78) }
-        if state.ui.handleHovering { return Color.white.opacity(theme.isDark ? 0.18 : 0.62) }
-        return Color.white.opacity(theme.isDark ? 0.10 : 0.44)
-    }
-
-    private var dotColor: Color {
-        if state.ui.handleDropTargeted { return .white }
-        return theme.isDark ? Color.white.opacity(0.55) : Color(hex: 0x1C202C, alpha: 0.48)
-    }
-
     var body: some View {
-        VStack(spacing: 4.5) {
+        VStack(spacing: 5) {
             ForEach(0..<6, id: \.self) { _ in
-                Circle().fill(dotColor).frame(width: 3, height: 3)
+                Circle()
+                    .fill(state.ui.handleHovering ? theme.text.opacity(0.85) : theme.text.opacity(0.45))
+                    .frame(width: 3, height: 3)
             }
         }
         .frame(width: SidebarController.handleWidth, height: SidebarController.handleHeight)
         .background(
-            ZStack {
-                VisualEffectBackground(dark: theme.isDark)
-                RoundedRectangle(cornerRadius: 6).fill(fill)
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(LinearGradient(colors: [Color.white.opacity(0.28), .clear],
-                                         startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false)
-            }
-            .overlay(RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(theme.isDark ? Color.white.opacity(0.14) : Color.white.opacity(0.55)))
-            .shadow(color: .black.opacity(theme.isDark ? 0.40 : 0.22), radius: 6, x: -1, y: 2)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(state.ui.handleDropTargeted
+                      ? theme.accent.opacity(0.75)
+                      : (state.ui.handleHovering ? theme.bar : theme.bg.opacity(0.85)))
+                .shadow(color: .black.opacity(0.35), radius: 4, x: -1, y: 1)
         )
         .contentShape(Rectangle())
         .onHover { entered in
@@ -321,7 +251,7 @@ struct HandleColumn: View {
     }
 }
 
-// MARK: - 面板主体(玻璃卡片 = 头部 + Tab 栏 + 内容 + 底部音乐卡)
+// MARK: - 面板主体(渲染证据:圆角卡片 = 头部 + Tab 栏 + 内容 + 底部音乐卡)
 
 struct PanelBody: View {
     @ObservedObject var state: AppState
@@ -330,10 +260,11 @@ struct PanelBody: View {
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             PanelHeader(state: state, controller: controller)
             PanelTabBar(state: state)
             PanelContent(state: state)
+                .frame(maxWidth: .infinity)
                 .frame(maxHeight: .infinity)
             MusicCard(state: state)
         }
@@ -341,8 +272,9 @@ struct PanelBody: View {
         .padding(.trailing, 5)   // 与右缘把手留出间距
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            GlassPanelBackground(theme: theme,
-                                 opacityScale: state.settings.backgroundOpacity)
+            RoundedRectangle(cornerRadius: 14)
+                .fill(theme.bg)
+                .shadow(color: .black.opacity(0.28), radius: 18, x: -3, y: 4)
         )
         .overlay(alignment: .leading) { ResizeEdge(axis: .width, controller: controller) }
         .overlay(alignment: .bottom) { ResizeEdge(axis: .height, controller: controller) }
@@ -362,48 +294,45 @@ struct PanelHeader: View {
     var body: some View {
         HStack(spacing: 10) {
             SDLogo()
-                .frame(width: 44, height: 44)
+                .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(weekdayText).font(.system(size: 12)).foregroundStyle(theme.text2)
                 Text(dateText).font(.system(size: 20, weight: .bold)).foregroundStyle(theme.text)
             }
             Spacer(minLength: 0)
-            headerButton("gearshape", active: false, help: "设置") {
+            Button {
                 NotificationCenter.default.post(name: .sideDockOpenSettings, object: nil)
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15))
+                    .foregroundStyle(theme.text2)
             }
-            headerButton(state.settings.pinned ? "pin.fill" : "pin",
-                         active: state.settings.pinned,
-                         help: state.settings.pinned ? "常驻模式(已固定,不自动收起)" : "点击固定面板") {
+            .buttonStyle(.plain)
+            .help("设置")
+            Button {
                 state.settings.pinned.toggle()
+            } label: {
+                Image(systemName: state.settings.pinned ? "pin.fill" : "pin")
+                    .font(.system(size: 15))
+                    .foregroundStyle(state.settings.pinned ? theme.text : theme.text2)
             }
-            headerButton("chevron.right", active: false, help: "收起侧边栏") {
+            .buttonStyle(.plain)
+            .help(state.settings.pinned ? "常驻模式(已固定,不自动收起)" : "点击固定面板")
+            Button {
                 controller.collapse()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(theme.text2)
             }
+            .buttonStyle(.plain)
+            .help("收起侧边栏")
         }
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 5)
                 .onChanged { v in controller.dragHandleBy(dy: v.translation.height) }
         )
-    }
-
-    /// 玻璃圆形图标钮(30×30,激活态品牌蓝玻璃)
-    @ViewBuilder
-    private func headerButton(_ symbol: String, active: Bool, help: String,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: active ? .semibold : .medium))
-                .foregroundStyle(active ? theme.accent : theme.text2)
-                .frame(width: 30, height: 30)
-                .background(
-                    Capsule().fill(active ? theme.accentSoft : theme.card)
-                        .shadow(color: .black.opacity(theme.isDark ? 0.18 : 0.06), radius: 2, y: 1)
-                )
-                .overlay(Capsule().strokeBorder(active ? Color.clear : theme.border))
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 
     private var weekdayText: String {
@@ -417,24 +346,20 @@ struct PanelHeader: View {
     }
 }
 
-// SD 徽标(蓝渐变圆角方块 + 内顶高光 + 品牌蓝投影)
+// SD 徽标(渲染证据:蓝渐变圆角方块 + 白色粗体 SD)
 struct SDLogo: View {
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 11)
+            RoundedRectangle(cornerRadius: 9)
                 .fill(LinearGradient(colors: [Color(hex: 0x4A9EFF), Color(hex: 0x2F7BFF)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
-                .shadow(color: Color(hex: 0x2F7BFF, alpha: 0.35), radius: 8, x: 0, y: 3)
-            RoundedRectangle(cornerRadius: 11)
-                .fill(LinearGradient(colors: [Color.white.opacity(0.30), Color.clear],
-                                     startPoint: .top, endPoint: .center))
-                .allowsHitTesting(false)
-            Text("SD").font(.system(size: 15, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+            Text("SD").font(.system(size: 12, weight: .heavy, design: .rounded)).foregroundStyle(.white)
         }
     }
 }
 
-// MARK: Tab 栏(渲染证据:胶囊容器,5 个 Tab,选中蓝渐变胶囊白字,带数字徽章)
+// MARK: Tab 栏(渲染证据:5 个独立胶囊左对齐排列,选中蓝→青渐变胶囊白字,
+// 未选中灰底胶囊深色文字;待办/暂存/密码带白底蓝字数字徽章)
 
 struct PanelTabBar: View {
     @ObservedObject var state: AppState
@@ -442,19 +367,13 @@ struct PanelTabBar: View {
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
     var body: some View {
-        HStack(spacing: 2) {
-            tabButton(.todo, badge: pendingTodoCount)
-            tabButton(.notes, badge: nil)
-            tabButton(.downloads, badge: nil)
-            tabButton(.shelf, badge: state.shelf.items.count)
-            tabButton(.passwords, badge: state.vault.entries.count)
-        }
-        .padding(3)
-        .background(
-            Capsule().fill(theme.bar)
-                .shadow(color: .black.opacity(theme.isDark ? 0.15 : 0.04), radius: 2, y: 1)
-        )
-        .overlay(Capsule().strokeBorder(theme.border))
+            HStack(spacing: 5) {
+                tabButton(.todo, badge: pendingTodoCount)
+                tabButton(.notes, badge: nil)
+                tabButton(.downloads, badge: nil)
+                tabButton(.shelf, badge: state.shelf.items.count + state.clipboard.entries.count)
+                tabButton(.passwords, badge: state.vault.entries.count)
+            }
     }
 
     private var pendingTodoCount: Int {
@@ -467,29 +386,28 @@ struct PanelTabBar: View {
         Button {
             state.settings.tab = tab
         } label: {
-            HStack(spacing: 3) {
+                HStack(spacing: 3) {
                 Image(systemName: tab.symbol).font(.system(size: 10, weight: .medium))
                 Text(tab.title).font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    .lineLimit(1).fixedSize()
                 if let badge, badge > 0 {
                     Text("\(badge)")
-                        .font(.system(size: 9, weight: .semibold))
-                        .monospacedDigit()
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Capsule().fill(selected ? Color.white.opacity(0.25) : theme.accentSoft))
-                        .foregroundStyle(selected ? .white : theme.accent)
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 13, height: 13)
+                        .background(Circle().fill(Color.white.opacity(0.92)))
+                        .foregroundStyle(theme.accent)
                 }
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
+            .fixedSize()
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .background(
                 Capsule().fill(selected
                                ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2],
-                                                              startPoint: .top, endPoint: .bottom))
-                               : AnyShapeStyle(Color.clear))
+                                                              startPoint: .leading, endPoint: .trailing))
+                               : AnyShapeStyle(theme.pill))
             )
-            // 选中胶囊:品牌蓝投影(设计稿 0 3 8 rgba(47,110,255,0.35))
-            .shadow(color: selected ? theme.accent.opacity(theme.isDark ? 0.45 : 0.35) : .clear,
-                    radius: selected ? 8 : 0, x: 0, y: selected ? 3 : 0)
-            .foregroundStyle(selected ? .white : theme.text2)
+            .shadow(color: selected ? theme.accent2.opacity(0.35) : .clear, radius: 4, y: 2)
+            .foregroundStyle(selected ? .white : theme.text)
         }
         .buttonStyle(.plain)
     }
@@ -512,57 +430,50 @@ struct MusicCard: View {
                             Image(nsImage: art).resizable().aspectRatio(contentMode: .fill)
                         } else {
                             ZStack {
-                                RoundedRectangle(cornerRadius: 10)
+                                RoundedRectangle(cornerRadius: 12)
                                     .fill(LinearGradient(colors: [Color(hex: 0x4A9EFF), Color(hex: 0x2F7BFF)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-                                Image(systemName: "music.note").foregroundStyle(.white).font(.system(size: 18))
+                                Image(systemName: "music.note").foregroundStyle(.white).font(.system(size: 20))
                             }
                         }
                     }
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(snap.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(snap.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.text)
                             .lineLimit(1)
                         Text([snap.artist, snap.album].filter { !$0.isEmpty }.joined(separator: " — "))
-                            .font(.system(size: 11)).foregroundStyle(theme.text2).lineLimit(1)
-                        Text(snap.app).font(.system(size: 10)).foregroundStyle(theme.text3)
+                            .font(.system(size: 12)).foregroundStyle(theme.text2).lineLimit(1)
+                        Text(snap.app).font(.system(size: 11)).foregroundStyle(theme.text3)
                     }
                     Spacer(minLength: 0)
                 }
                 GeometryReader { geo in
-                    let progress = max(0, min(1, snap.elapsed / max(snap.duration, 0.1)))
                     ZStack(alignment: .leading) {
-                        Capsule().fill(theme.bar)
-                        Capsule().fill(LinearGradient(colors: [theme.accent, Color(hex: 0x22D3EE)],
+                        Capsule().fill(Color.primary.opacity(0.10))
+                        Capsule().fill(LinearGradient(colors: [theme.accent, theme.accent2],
                                                       startPoint: .leading, endPoint: .trailing))
-                            .frame(width: progress * geo.size.width)
-                        // 玻璃滑块(8pt 白点)
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 8, height: 8)
-                            .shadow(color: .black.opacity(0.30), radius: 2, y: 1)
-                            .offset(x: progress * geo.size.width - 4)
+                            .frame(width: max(0, min(1, snap.elapsed / max(snap.duration, 0.1))) * geo.size.width)
                     }
                 }
                 .frame(height: 4)
                 HStack {
                     Text(timeString(snap.elapsed)).font(.system(size: 10)).foregroundStyle(theme.text3)
                     Spacer()
-                    Text("-" + timeString(max(0, snap.duration - snap.elapsed)))
-                        .font(.system(size: 10)).foregroundStyle(theme.text3)
+                    // 渲染证据:右侧时间 = 曲目总时长(无负号)
+                    Text(timeString(max(0, snap.duration))).font(.system(size: 10)).foregroundStyle(theme.text3)
                 }
-                HStack(spacing: 44) {
+                HStack(spacing: 56) {
                     Button { music.send(.previous) } label: {
-                        Image(systemName: "backward.end.fill").font(.system(size: 14)).foregroundStyle(theme.text)
+                        Image(systemName: "backward.fill").font(.system(size: 16)).foregroundStyle(theme.text)
                     }
                     Button { music.send(.toggle) } label: {
                         Image(systemName: snap.playing ? "pause.fill" : "play.fill")
                             .font(.system(size: 20)).foregroundStyle(theme.text)
                     }
                     Button { music.send(.next) } label: {
-                        Image(systemName: "forward.end.fill").font(.system(size: 14)).foregroundStyle(theme.text)
+                        Image(systemName: "forward.fill").font(.system(size: 16)).foregroundStyle(theme.text)
                     }
                 }
                 .buttonStyle(.plain)
@@ -581,17 +492,7 @@ struct MusicCard: View {
             }
         }
         .padding(12)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 16).fill(theme.card)
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(LinearGradient(colors: [Color.white.opacity(theme.isDark ? 0.08 : 0.30), Color.clear],
-                                         startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false)
-            }
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.border))
-            .shadow(color: .black.opacity(theme.isDark ? 0.18 : 0.07), radius: 4, y: 2)
-        )
+        .background(RoundedRectangle(cornerRadius: 16).fill(theme.card))
         .onAppear { music.startWatch() }
     }
 
@@ -633,7 +534,8 @@ struct ResizeCorner: View {
     @ObservedObject var controller: SidebarController
 
     var body: some View {
-        Circle().fill(Color.primary.opacity(0.10)).frame(width: 10, height: 10)
+        // 原版渲染图无可见角落圆点:保留拖拽热区但不再画出
+        Circle().fill(Color.clear).frame(width: 10, height: 10)
             .frame(width: 16, height: 16)
             .contentShape(Rectangle())
             .onHover { inside in

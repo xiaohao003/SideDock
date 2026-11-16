@@ -137,6 +137,8 @@ final class TodoStore: ObservableObject, JSONStore {
     }
 
     private func syncNotifications() {
+        // promoshot 渲染模式不碰通知中心(注入演示数据会触发权限弹窗)
+        guard ProcessInfo.processInfo.environment["SIDEDOCK_PROMOSHOT"] == nil else { return }
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         let pending = items.filter { !$0.done && $0.due.map { $0 > Date() } == true }

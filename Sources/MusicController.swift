@@ -35,7 +35,8 @@ enum MediaCommand: Int {
 // MARK: - 控制器(MediaHelper 子进程架构)
 
 final class MusicController: ObservableObject {
-    @Published private(set) var snapshot: NowPlayingSnapshot?
+    // snapshot 允许内部注入:promoshot 渲染模式要放演示曲目
+    @Published var snapshot: NowPlayingSnapshot?
     @Published private(set) var artwork: NSImage?
     @Published private(set) var agentRunning = false
 
@@ -71,6 +72,8 @@ final class MusicController: ObservableObject {
     }
 
     func startWatch() {
+        // promoshot 渲染模式不启动真实监听,用注入的演示曲目
+        guard ProcessInfo.processInfo.environment["SIDEDOCK_PROMOSHOT"] == nil else { return }
         guard !watchRequested else { return }
         watchRequested = true
         launchAgent()
