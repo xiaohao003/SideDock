@@ -73,9 +73,10 @@ struct Hotkey: Codable, Equatable {
     }
 }
 
-// 面板分类(渲染证据:5 个胶囊 Tab,顺序 待办/笔记/下载/暂存/密码)
+// 面板分类(渲染证据:5 个胶囊 Tab,顺序 待办/笔记/下载/暂存/密码;
+// 剪贴板为用户要求新增的第 6 个 Tab,排在密码之后,不再内嵌于暂存)
 enum PanelTab: String, Codable, CaseIterable, Identifiable {
-    case todo, notes, downloads, shelf, passwords
+    case todo, notes, downloads, shelf, passwords, clipboard
     var id: String { rawValue }
 
     var title: String {
@@ -85,6 +86,7 @@ enum PanelTab: String, Codable, CaseIterable, Identifiable {
         case .downloads: return "下载"
         case .shelf: return "暂存"
         case .passwords: return "密码"
+        case .clipboard: return "剪贴板"
         }
     }
 
@@ -95,6 +97,7 @@ enum PanelTab: String, Codable, CaseIterable, Identifiable {
         case .downloads: return "arrow.down.circle"
         case .shelf: return "tray.and.arrow.down"
         case .passwords: return "key"
+        case .clipboard: return "doc.on.clipboard"
         }
     }
 }
@@ -197,8 +200,6 @@ final class UIState: ObservableObject {
     // 下载:分段(最近/全部)+ 搜索
     @Published var downloadsAll = false
     @Published var downloadsSearch = ""
-    // 暂存:分段(文件/剪贴板)
-    @Published var shelfSegmentClips = false
     // 笔记 / 密码:内联新建表单开关
     @Published var notesAdding = false
     @Published var notesDraft = ""
@@ -224,6 +225,7 @@ final class UIState: ObservableObject {
     @Published var clipSelectedIndex: Int?
     @Published var clipToast: String?
     @Published var clipHover: [UUID: Bool] = [:]
+    @Published var clipPopoverVisible = false   // 菜单栏剪贴板弹窗是否打开
     // 设置
     @Published var launchAtLoginMirror = SMAppService.mainApp.status == .enabled
     @Published var hotkeyRecording = false

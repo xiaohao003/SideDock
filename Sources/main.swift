@@ -134,18 +134,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           sourceBundle: "com.tencent.xinWeChat", sourceName: "微信"),
             ]
         }
-        // 与原版 --promoshot 输出同款 8 张(证据:原版输出文件集
-        // panel-{todo,shelf}-{light,dark} + notes/downloads/passwords/shelf-clip-light)。
-        // 主题强制按每张固定,不读用户已存设置(否则共享 defaults 域会把渲染带偏)。
-        let jobs: [(file: String, tab: PanelTab, dark: Bool, clip: Bool)] = [
-            ("panel-todo-light.png",       .todo,      false, false),
-            ("panel-todo-dark.png",        .todo,      true,  false),
-            ("panel-notes-light.png",      .notes,     false, false),
-            ("panel-downloads-light.png",  .downloads, false, false),
-            ("panel-passwords-light.png",  .passwords, false, false),
-            ("panel-shelf-light.png",      .shelf,     false, false),
-            ("panel-shelf-dark.png",       .shelf,     true,  false),
-            ("panel-shelf-clip-light.png", .shelf,     false, true),
+        // 与原版 --promoshot 输出基本同款(panel-{todo,shelf}-{light,dark} +
+        // notes/downloads/passwords-light);剪贴板是本项目新增 Tab,无原版对应,
+        // 输出 panel-clipboard-light.png 做回归记录。主题强制按每张固定,
+        // 不读用户已存设置(否则共享 defaults 域会把渲染带偏)。
+        let jobs: [(file: String, tab: PanelTab, dark: Bool)] = [
+            ("panel-todo-light.png",       .todo,      false),
+            ("panel-todo-dark.png",        .todo,      true),
+            ("panel-notes-light.png",      .notes,     false),
+            ("panel-downloads-light.png",  .downloads, false),
+            ("panel-passwords-light.png",  .passwords, false),
+            ("panel-shelf-light.png",      .shelf,     false),
+            ("panel-shelf-dark.png",       .shelf,     true),
+            ("panel-clipboard-light.png",  .clipboard, false),
         ]
         let savedSettings = state.settings
         // 演示数据对齐原版 promoshot(仅渲染用;JSON 落在隔离的 SIDEDOCK_DATA_DIR,
@@ -222,12 +223,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sidebar.applyGeometry(animated: false)
 
         // 渲染期把窗口 appearance 跟着主题切,深色变体才画得对
-        func apply(_ job: (file: String, tab: PanelTab, dark: Bool, clip: Bool)) {
+        func apply(_ job: (file: String, tab: PanelTab, dark: Bool)) {
             // 同时固定模式:避免"跟随系统"的同步逻辑在渲染期改写生效主题
             state.settings.themeMode = job.dark ? .dark : .light
             state.settings.themeIsDark = job.dark
             state.settings.tab = job.tab
-            state.ui.shelfSegmentClips = job.clip
             sidebar.panel.appearance = NSAppearance(named: job.dark ? .darkAqua : .aqua)
         }
 

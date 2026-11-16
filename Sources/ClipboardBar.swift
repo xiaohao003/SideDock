@@ -98,6 +98,7 @@ final class ClipboardBarController: NSObject {
         p.orderFrontRegardless()
         p.makeKey()
         panel = p
+        state.ui.clipPopoverVisible = true
 
         // 点击面板外部关闭(全局监听其它应用;本地监听本应用其它窗口)。
         // 注意必须放行"状态栏图标本身"的点击,否则它的 toggle 动作会在
@@ -132,6 +133,7 @@ final class ClipboardBarController: NSObject {
         outsideMonitors.removeAll()
         panel?.orderOut(nil)
         panel = nil
+        state.ui.clipPopoverVisible = false
     }
 }
 

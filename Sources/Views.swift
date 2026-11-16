@@ -20,6 +20,7 @@ struct PanelContent: View {
                 case .downloads: DownloadsTab(state: state)
                 case .shelf: ShelfTab(state: state)
                 case .passwords: PasswordsTab(state: state)
+                case .clipboard: MaccyClipboardList(state: state)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -532,27 +533,16 @@ struct DownloadRow: View {
     }
 }
 
-// MARK: - 暂存(渲染证据:文件|剪贴板 分段 / 文件两列网格 / 剪贴板文本卡片带 ×)
+// MARK: - 暂存(文件货架;剪贴板已抽为独立 Tab,见 MaccyClipboardList)
 
 struct ShelfTab: View {
     @ObservedObject var state: AppState
     @ObservedObject private var store = AppState.shared.shelf
-    @ObservedObject private var clips = AppState.shared.clipboard
 
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SegmentedBar(options: ["文件", "剪贴板"], selection: state.ui.shelfSegmentClips ? 1 : 0) {
-                state.ui.shelfSegmentClips = ($0 == 1)
-            }
-
-            if state.ui.shelfSegmentClips {
-                clipsSegment
-            } else {
-                filesSegment
-            }
-        }
+        filesSegment
     }
 
     // 文件:两列网格(渲染证据:64 图标 + 居中文件名)
@@ -622,11 +612,6 @@ struct ShelfTab: View {
         }
     }
 
-    // 剪贴板:Maccy 式交互(REA 逆向 Maccy 2.8.0,证据见 Stores.swift 头注释)
-    @ViewBuilder
-    private var clipsSegment: some View {
-        MaccyClipboardList(state: state)
-    }
 }
 
 // MARK: - 剪贴板列表(仿 Maccy 2.8.0:搜索 / 固定区+分隔线 / 清除未固定 /
@@ -795,7 +780,8 @@ struct MaccyClipboardList: View {
         guard state.ui.clipKeyMonitor == nil else { return }
         state.ui.clipKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
             let ui = AppState.shared.ui
-            guard AppState.shared.settings.tab == .shelf, ui.shelfSegmentClips else { return ev }
+            // 列表可见即生效:剪贴板 Tab 或菜单栏剪贴板弹窗
+            guard AppState.shared.settings.tab == .clipboard || ui.clipPopoverVisible else { return ev }
             let rows = AppState.shared.clipboard.visible(query: ui.clipSearch)
             guard !rows.isEmpty else { return ev }
             switch ev.keyCode {

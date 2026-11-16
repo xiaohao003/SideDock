@@ -367,13 +367,23 @@ struct PanelTabBar: View {
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
     var body: some View {
-            HStack(spacing: 5) {
-                tabButton(.todo, badge: pendingTodoCount)
-                tabButton(.notes, badge: nil)
-                tabButton(.downloads, badge: nil)
-                tabButton(.shelf, badge: state.shelf.items.count + state.clipboard.entries.count)
-                tabButton(.passwords, badge: state.vault.entries.count)
+        // 6 个 Tab:默认 472pt 宽度下正好放下;更窄(最小 360)时横向滚动兜底,
+        // 选中项自动滚入可视区
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 5) {
+                    tabButton(.todo, badge: pendingTodoCount)
+                    tabButton(.notes, badge: nil)
+                    tabButton(.downloads, badge: nil)
+                    tabButton(.shelf, badge: state.shelf.items.count)
+                    tabButton(.passwords, badge: state.vault.entries.count)
+                    tabButton(.clipboard, badge: state.clipboard.entries.count)
+                }
             }
+            .onChange(of: state.settings.tab) { tab in
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(tab, anchor: .center) }
+            }
+        }
     }
 
     private var pendingTodoCount: Int {
@@ -400,6 +410,7 @@ struct PanelTabBar: View {
             }
             .fixedSize()
             .padding(.horizontal, 8).padding(.vertical, 4)
+            .id(tab)
             .background(
                 Capsule().fill(selected
                                ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2],
