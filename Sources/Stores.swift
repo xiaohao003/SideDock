@@ -132,6 +132,42 @@ final class TodoStore: ObservableObject, JSONStore {
         }
     }
 
+    // MARK: - 分组判定(单一事实源:计数、过滤、新增跳转共用同一套规则)
+
+    /// 到期预设 → 具体时间(今日=今天 18:00 / 明日=明天 09:00 / 一周=7 天后 09:00)。
+    /// 一律取"日历日 + 固定时刻",不能用 now+7×24h(会落在分组窗口外导致任务不可见)
+    static func dueDate(forPreset preset: Int, now: Date = Date(), calendar: Calendar = .current) -> Date? {
+        let day = calendar.startOfDay(for: now)
+        switch preset {
+        case 1: return calendar.date(byAdding: DateComponents(hour: 18), to: day)
+        case 2: return calendar.date(byAdding: DateComponents(day: 1, hour: 9), to: day)
+        case 3: return calendar.date(byAdding: DateComponents(day: 7, hour: 9), to: day)
+        default: return nil
+        }
+    }
+
+    /// 条目属于哪个分组:1 今日(含无日期) 2 明日 3 一周(其余未完成:未来一周/逾期)
+    /// 4 历史(已完成)。保证任何未完成条目必然落在 1..3 之一,不会"加了看不见"。
+    func bucket(of item: TodoItem, calendar: Calendar = .current) -> Int {
+        if item.done { return 4 }
+        guard let due = item.due else { return 1 }
+        if calendar.isDateInToday(due) { return 1 }
+        if calendar.isDateInTomorrow(due) { return 2 }
+        return 3
+    }
+
+    func matches(_ item: TodoItem, filter: Int) -> Bool {
+        bucket(of: item) == filter
+    }
+
+    func count(for filter: Int) -> Int {
+        items.filter { matches($0, filter: filter) }.count
+    }
+
+    func remove(_ id: UUID) {
+        items.removeAll { $0.id == id }
+    }
+
     func clearCompleted() {
         items.removeAll { $0.done }
     }

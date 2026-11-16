@@ -131,12 +131,18 @@ struct TodoTab: View {
             // 输入卡(渲染证据:输入行 + 到期胶囊行同处一张灰卡内)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(LinearGradient(colors: [theme.accent, theme.accent2],
-                                             startPoint: .top, endPoint: .bottom))
-                        .frame(width: 24, height: 24)
-                        .overlay(Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
-                        .onTapGesture { add() }
+                    // nonactivatingPanel 上 onTapGesture 首点会被吞,统一用 Button
+                    Button {
+                        add()
+                    } label: {
+                        Circle()
+                            .fill(LinearGradient(colors: [theme.accent, theme.accent2],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .frame(width: 24, height: 24)
+                            .overlay(Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+                    }
+                    .buttonStyle(.plain)
+                    .help("添加(回车亦可)")
                     TextField("添加待办，回车保存", text: state.uiBind(\.todoDraft))
                         .font(.system(size: 13))
                         .textFieldStyle(.plain)
@@ -157,10 +163,10 @@ struct TodoTab: View {
 
             // 分组筛选(渲染证据:今日/明日/一周/历史 四枚带计数胶囊,无"全部")
             HStack(spacing: 6) {
-                groupPill("今日", 1, countToday)
-                groupPill("明日", 2, countTomorrow)
-                groupPill("一周", 3, countWeek)
-                groupPill("历史", 4, store.items.filter { $0.done }.count)
+                groupPill("今日", 1, store.count(for: 1))
+                groupPill("明日", 2, store.count(for: 2))
+                groupPill("一周", 3, store.count(for: 3))
+                groupPill("历史", 4, store.count(for: 4))
                 Spacer()
             }
 
@@ -179,34 +185,8 @@ struct TodoTab: View {
         .onAppear { store.requestAuthorization() }
     }
 
-    private var countToday: Int {
-        store.items.filter { !$0.done && Calendar.current.isDateInToday($0.due ?? Date()) }
-            .filter { ($0.due ?? .distantFuture) >= Calendar.current.startOfDay(for: Date()) }
-            .filter { Calendar.current.isDateInToday($0.due ?? Date()) }.count
-    }
-    private var countTomorrow: Int {
-        store.items.filter { Calendar.current.isDateInTomorrow($0.due ?? .distantPast) && !$0.done }.count
-    }
-    private var countWeek: Int {
-        let cal = Calendar.current
-        let weekEnd = cal.date(byAdding: .day, value: 7, to: cal.startOfDay(for: Date()))!
-        return store.items.filter { item in
-            guard !item.done, let d = item.due else { return false }
-            return d > Date() && d < weekEnd && !cal.isDateInToday(d) && !cal.isDateInTomorrow(d)
-        }.count
-    }
-
     private var filtered: [TodoItem] {
-        let cal = Calendar.current
-        switch state.ui.todoFilter {
-        case 1: return store.items.filter { !$0.done && ($0.due == nil || cal.isDateInToday($0.due!)) }
-        case 2: return store.items.filter { !$0.done && cal.isDateInTomorrow($0.due ?? .distantPast) }
-        case 3:
-            let weekEnd = cal.date(byAdding: .day, value: 7, to: cal.startOfDay(for: Date()))!
-            return store.items.filter { !$0.done && ($0.due.map { $0 < weekEnd } ?? true) }
-        case 4: return store.items.filter { $0.done }
-        default: return store.items.filter { !$0.done }
-        }
+        store.items.filter { store.matches($0, filter: state.ui.todoFilter) }
     }
 
     @ViewBuilder
@@ -304,15 +284,12 @@ struct TodoTab: View {
     private func add() {
         let text = state.ui.todoDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        var due: Date?
-        switch state.ui.todoPreset {
-        case 1: due = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: Date())
-        case 2: due = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!)
-        case 3: due = Calendar.current.date(byAdding: .day, value: 7, to: Date())
-        default: due = nil
-        }
+        let due = TodoStore.dueDate(forPreset: state.ui.todoPreset)
+        let item = TodoItem(title: text, due: due)
         store.add(text, due: due)
         state.ui.todoDraft = ""
+        // 新增后跳到新条目所在分组,保证"添加立刻可见"(否则像没加上一样)
+        state.ui.todoFilter = store.bucket(of: item)
     }
 }
 
