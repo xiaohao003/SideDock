@@ -1,0 +1,47 @@
+[package]
+name = "sidedock"
+version = "1.1.0"
+edition = "2021"
+description = "SideDock for Windows — 桌面侧边栏(待办/笔记/下载/暂存/密码/剪贴板)"
+license = "MIT"
+
+[[bin]]
+name = "SideDock"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.32", default-features = true }
+egui = "0.32"
+arboard = "3.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+rand = "0.8"
+base64 = "0.22"
+dirs = "5"
+
+# Windows 专属依赖(非 Windows 平台编译时自动跳过;逻辑层走 platform 模块的替身实现)
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+global-hotkey = "0.6"
+tray-icon = "0.19"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_System_DataExchange",
+    "Win32_System_Threading",
+    "Win32_System_Com",
+    "Win32_Security_Cryptography",
+    "Media_Control",
+    "Storage_Streams",
+    "Foundation",
+] }
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true

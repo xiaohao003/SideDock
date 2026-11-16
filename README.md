@@ -4,6 +4,8 @@ macOS 屏幕右缘侧边栏工具:待办、笔记、下载、暂存、密码、�
 
 基于对 SideDock 1.1(原第三方应用)的静态逆向与运行时行为分析,以 Swift(AppKit + SwiftUI)全新源码实现;剪贴板交互参照 [Maccy](https://github.com/p0deje/Maccy) 2.8.0 逆向结论。
 
+> **Windows 版**:Rust + egui 重实现,位于 [`windows/`](windows/README.md)(构建方式与功能对照见其 README;push 到 `windows/**` 会在 Actions 产出 exe)。
+
 ## 功能
 
 | 面板 | 功能 |
