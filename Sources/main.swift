@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        setupEditMenu()
 
         sidebar = SidebarController(state: state)
         sidebar?.show()
@@ -286,6 +287,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.settingsWindow?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             }
             .store(in: &themeCancellables)
+    }
+
+    /// 无菜单栏 accessory 应用的输入框需要 Edit 菜单承接 ⌘X/⌘C/⌘V/⌘A 的按键等价物:
+    /// 没有它,非激活面板里 SwiftUI TextField 的粘贴/全选会静默失效
+    /// (菜单项 target 为 nil,按键等价物经响应链路由到字段编辑器的 cut:/copy:/paste:/selectAll:)
+    private func setupEditMenu() {
+        let edit = NSMenu(title: "编辑")
+        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editItem = NSMenuItem()
+        editItem.title = "编辑"
+        editItem.submenu = edit
+        let main = NSMenu(title: "主菜单")
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     private func setupStatusItem() {
