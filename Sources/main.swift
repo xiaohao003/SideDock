@@ -48,11 +48,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.openSettings()
         }
 
+        // 诊断导出:SIDEDOCK_DUMP_PANEL=<png 路径> → 原样渲染当前面板 + 打印生效设置后退出
+        // (不强改主题/尺寸,用于排查"设置变深了面板还是浅色"这类运行时问题)
+        // SIDEDOCK_DUMP_PANEL_FLIP=<png2> 时:第一张之后模拟用户切到深色再导一张,
+        // 用于复现"会话中途切主题面板不刷新"。
+        if let dumpPath = ProcessInfo.processInfo.environment["SIDEDOCK_DUMP_PANEL"] {
+            let flipPath = ProcessInfo.processInfo.environment["SIDEDOCK_DUMP_PANEL_FLIP"]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                self?.dumpPanelForDiagnostics(to: dumpPath, thenFlipTo: flipPath)
+            }
+        }
+
         // 对齐原版 --promoshot(证据:cacheDisplayInRect:toBitmapImageRep:)
         if let outDir = ProcessInfo.processInfo.environment["SIDEDOCK_PROMOSHOT"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
                 self?.runPromoshot(outDir: outDir)
             }
+        }
+    }
+
+    /// 诊断:按当前状态渲染面板 + 打印设置,不动任何用户数据
+    private func dumpPanelForDiagnostics(to path: String, thenFlipTo flipPath: String? = nil) {
+        sidebar?.expand()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.renderPanelPNG(to: path)
+            print("[dump] settings = \(self.settingsJSON())")
+            print("[dump] panelAppearance = \(self.sidebar?.panel.appearance?.name.rawValue ?? "?") " +
+                  "settingsWindowAppearance = \(self.settingsWindow?.appearance?.name.rawValue ?? "nil")")
+            if let flipPath {
+                // 模拟用户在设置里把主题切到深色(与 Picker 同一路径)
+                self.state.applyThemeMode(.dark)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.renderPanelPNG(to: flipPath)
+                    print("[dump][flip] settings = \(self.settingsJSON())")
+                    print("[dump][flip] panelAppearance = \(self.sidebar?.panel.appearance?.name.rawValue ?? "?")")
+                    NSApp.terminate(nil)
+                }
+            } else {
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    private func settingsJSON() -> String {
+        if let data = try? JSONEncoder().encode(state.settings) {
+            return String(data: data, encoding: .utf8) ?? "?"
+        }
+        return "?"
+    }
+
+    private func renderPanelPNG(to path: String) {
+        guard let view = sidebar?.panel.contentView, view.bounds.width > 50,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                         pixelsWide: Int(view.bounds.width * 2),
+                                         pixelsHigh: Int(view.bounds.height * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4,
+                                         hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .calibratedRGB,
+                                         bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = view.bounds.size
+        view.cacheDisplay(in: view.bounds, to: rep)
+        if let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path))
+            print("[dump] wrote \(path)")
         }
     }
 
@@ -217,8 +275,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         themeObserver = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil, queue: .main
-        ) { [weak state] _ in
-            state?.syncEffectiveTheme()
+        ) { [weak state] note in
+            state?.syncEffectiveTheme(notificationUserInfo: note.userInfo)
         }
 
         state.$settings

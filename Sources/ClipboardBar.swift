@@ -30,7 +30,7 @@ final class ClipboardPanel: NSPanel {
 
 // MARK: - 控制器
 
-final class ClipboardBarController {
+final class ClipboardBarController: NSObject {
     private let state: AppState
     private var statusItem: NSStatusItem?
     private var panel: ClipboardPanel?
@@ -99,18 +99,31 @@ final class ClipboardBarController {
         p.makeKey()
         panel = p
 
-        // 点击面板外部关闭(全局监听其它应用;本地监听本应用其它窗口)
+        // 点击面板外部关闭(全局监听其它应用;本地监听本应用其它窗口)。
+        // 注意必须放行"状态栏图标本身"的点击,否则它的 toggle 动作会在
+        // 监听器把面板关掉之后又重新打开,图标就再也关不上了。
         outsideMonitors.append(
             NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-                self?.hidePanel()
+                guard let self else { return }
+                if let frame = self.statusButtonScreenFrame(), frame.contains(NSEvent.mouseLocation) { return }
+                self.hidePanel()
             }
         )
         outsideMonitors.append(
             NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] ev in
-                if let self, ev.window !== self.panel { self.hidePanel() }
+                guard let self else { return ev }
+                if ev.window === self.panel { return ev }               // 面板内正常交互
+                if ev.window === self.statusItem?.button?.window { return ev }  // 图标点击交给 action
+                self.hidePanel()
                 return ev
             }
         )
+    }
+
+    /// 状态栏图标在屏幕上的 frame(用于全局监听里排除图标自身的点击)
+    private func statusButtonScreenFrame() -> NSRect? {
+        guard let button = statusItem?.button, let win = button.window else { return nil }
+        return win.convertToScreen(button.frame)
     }
 
     func hidePanel() {

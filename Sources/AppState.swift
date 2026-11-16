@@ -162,14 +162,28 @@ struct Settings: Codable {
     }
 
     /// 系统当前是否深色外观
+    /// accessory 应用上 NSApp.effectiveAppearance 可能滞后/失真,以系统全局 defaults 为准;
+    /// "Auto"(自动切换)时 defaults 反映不了当下值,退回 effectiveAppearance。
     static func systemIsDark() -> Bool {
-        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let style = (UserDefaults.standard.string(forKey: "AppleInterfaceStyle") ?? "").lowercased()
+        if style == "auto" {
+            return NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        }
+        if !style.isEmpty { return style.contains("dark") }
+        return NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     /// 跟随系统模式下,把生效主题同步为系统外观
-    mutating func syncEffectiveTheme() {
+    /// notificationUserInfo:AppleInterfaceThemeChangedNotification 的 userInfo(含权威值)
+    mutating func syncEffectiveTheme(notificationUserInfo: [AnyHashable: Any]? = nil) {
         guard themeMode == .system else { return }
-        let dark = Self.systemIsDark()
+        let dark: Bool
+        if let style = notificationUserInfo?["AppleInterfaceTheme"] as? String,
+           style == "Dark" || style == "Light" {
+            dark = (style == "Dark")
+        } else {
+            dark = Self.systemIsDark()
+        }
         if themeIsDark != dark { themeIsDark = dark }
     }
 }
@@ -262,10 +276,10 @@ final class AppState: ObservableObject {
     }
 
     /// 系统外观切换通知 → 跟随系统模式同步
-    func syncEffectiveTheme() {
+    func syncEffectiveTheme(notificationUserInfo: [AnyHashable: Any]? = nil) {
         var s = settings
         let before = s.themeIsDark
-        s.syncEffectiveTheme()
+        s.syncEffectiveTheme(notificationUserInfo: notificationUserInfo)
         if s.themeIsDark != before { settings = s }
     }
 

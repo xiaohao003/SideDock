@@ -74,11 +74,17 @@ struct PillButton: View {
     }
 }
 
-/// 分段控件(渲染证据:紧凑灰底圆角容器,左对齐;白色描边选中段,不横向铺满)
+/// 分段控件(渲染证据:紧凑灰底圆角容器,左对齐;白底描边选中段,不横向铺满)
+/// 颜色全部走主题 token:之前用 Color.primary/Color.white 这类动态系统色,
+/// 深色窗口外观下会白字配白底直接隐形。
 struct SegmentedBar: View {
     let options: [String]
     let selection: Int
     let onChange: (Int) -> Void
+
+    private var theme: ThemeColors { Theme.colors(dark: AppState.shared.settings.themeIsDark) }
+    // 渲染证据:浅色下选中段是白底描边;深色下用浅灰底,避免系统动态色白字白底
+    private var dark: Bool { AppState.shared.settings.themeIsDark }
 
     var body: some View {
         HStack(spacing: 2) {
@@ -91,18 +97,23 @@ struct SegmentedBar: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 5)
                         .background(
-                            RoundedRectangle(cornerRadius: 6).fill(i == selection ? Color.white : Color.clear)
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(i == selection
+                                      ? AnyShapeStyle(dark ? Color(hex: 0x3A3A3E) : Color.white)
+                                      : AnyShapeStyle(Color.clear))
                                 .overlay(RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.primary.opacity(i == selection ? 0.14 : 0), lineWidth: 1))
+                                    .stroke(i == selection
+                                            ? (dark ? Color(hex: 0x4A4A4E) : Color(hex: 0xD6D6DA))
+                                            : .clear, lineWidth: 1))
                                 .shadow(color: .black.opacity(i == selection ? 0.08 : 0), radius: 2, y: 1)
                         )
-                        .foregroundStyle(i == selection ? Color.primary : Color.secondary)
+                        .foregroundStyle(i == selection ? theme.text : theme.text2)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(dark ? Color(hex: 0x262629) : Color(hex: 0xE4E4E7)))
     }
 }
 
