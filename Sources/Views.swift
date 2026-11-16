@@ -780,8 +780,7 @@ struct MaccyClipboardList: View {
         guard state.ui.clipKeyMonitor == nil else { return }
         state.ui.clipKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
             let ui = AppState.shared.ui
-            // 列表可见即生效:剪贴板 Tab 或菜单栏剪贴板弹窗
-            guard AppState.shared.settings.tab == .clipboard || ui.clipPopoverVisible else { return ev }
+            guard AppState.shared.settings.tab == .clipboard else { return ev }
             let rows = AppState.shared.clipboard.visible(query: ui.clipSearch)
             guard !rows.isEmpty else { return ev }
             switch ev.keyCode {
@@ -1028,9 +1027,6 @@ struct SettingsView: View {
             }
 
             Section("剪贴板") {
-                Toggle("在顶部菜单栏显示剪贴板", isOn: state.ui.settingsBinding(\.clipboardInMenuBar))
-                Text("菜单栏图标点击弹出独立剪贴板面板;行为与侧边栏“暂存 → 剪贴板”一致")
-                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("选中历史项后自动粘贴到前台应用", isOn: Binding(
                     get: { state.settings.autoPasteEnabled },
                     set: { state.settings.autoPaste = $0 }

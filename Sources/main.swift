@@ -16,7 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState.shared
     var sidebar: SidebarController?
     var shelfBarController: ShelfBarController?
-    var clipboardBar: ClipboardBarController?
+    // 菜单栏剪贴板入口暂时下线(代码保留在 ClipboardBar.swift,恢复时在此创建
+    // ClipboardBarController 并调用 setupThemeSync 里的两个 sink 即可)
     var settingsWindow: NSWindow?
     var statusItem: NSStatusItem?
     var localKeyMonitor: Any?
@@ -33,9 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         shelfBarController = ShelfBarController(state: state)
         if state.settings.shelfBarVisible { shelfBarController?.show() }
-
-        clipboardBar = ClipboardBarController(state: state)
-        clipboardBar?.setEnabled(state.settings.clipboardInMenuBar)
 
         setupStatusItem()
         setupEventMonitors()
@@ -284,18 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] dark in
-                let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-                self?.settingsWindow?.appearance = appearance
-                self?.clipboardBar?.applyAppearance()
-            }
-            .store(in: &themeCancellables)
-
-        state.$settings
-            .map(\.clipboardInMenuBar)
-            .removeDuplicates()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] on in
-                self?.clipboardBar?.setEnabled(on)
+                self?.settingsWindow?.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             }
             .store(in: &themeCancellables)
     }
