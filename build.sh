@@ -34,18 +34,9 @@ cp "$BUILD/MediaHelper.swift" "$RES/MediaHelper.swift"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-echo "==> 生成图标"
-ICONSET="$BUILD/icon.iconset"
-rm -rf "$ICONSET"; mkdir -p "$ICONSET"
-if [ ! -f "$BUILD/icon_1024.png" ]; then
-  swift make_icon.swift "$BUILD"
-fi
-for s in 16 32 64 128 256 512; do
-  cp "$BUILD/icon_1024.png" "$ICONSET/icon_${s}x${s}.png"
-  cp "$BUILD/icon_1024.png" "$ICONSET/icon_${s}x${s}@2x.png"
-done
-cp "$BUILD/icon_1024.png" "$ICONSET/icon_512x512@2x.png"
-iconutil -c icns "$ICONSET" -o "$RES/sidedock.icns"
+echo "==> 生成图标(玻璃主题:make_icon 逐尺寸重绘 squircle + iconset)"
+swift make_icon.swift "$BUILD"
+iconutil -c icns "$BUILD/icon.iconset" -o "$RES/sidedock.icns"
 
 echo "==> ad-hoc 签名"
 codesign --force --sign - "$APP"

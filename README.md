@@ -18,6 +18,15 @@ macOS 屏幕右缘侧边栏工具:待办、笔记、下载、暂存 + Maccy 式�
 | 音乐 | MediaRemote 私有框架:曲名/歌手/进度/封面/播放控制;看门狗自动重启 |
 | 底部常驻 | 每个面板底部固定迷你播放卡片 |
 
+## 玻璃主题(视觉)
+
+面板为毛玻璃拟态(与设计稿逐值对应,设计稿在仓库外层 `.open-design/sidedock-macos-glassmorphism-12-96pt-472-519pt-sd-44-44-5-ta/`):
+
+- **面板底** = 透明 NSPanel + `NSVisualEffectView`(浅色 `.sidebar` / 深色 `.hudWindow`,behindWindow 真实取景模糊)+ 半透明 tint(设置里的「背景不透明度」直接乘在其上)+ 顶部内侧高光 + 发丝描边 + 双层投影
+- **内容卡片** = 半透明玻璃层(填充 + 描边 + 内顶高光),悬停提亮一档
+- **色板** = `AppState.swift` 的 `ThemeColors`,浅色 accent `#3B82F6` / 深色 accent `#4A8DFF`,与设计稿 :root 令牌一一对应
+- **图标** = `make_icon.swift` 程序化绘制:超椭圆圆角方(n≈5,macOS squircle)+ 品牌蓝→靛渐变 + 玻璃面板图形(坞位横条 + 右缘把手),逐尺寸重绘 16–1024(@2x),小尺寸自动简化
+
 ## 构建(仅命令行工具,无需 Xcode)
 
 ```bash

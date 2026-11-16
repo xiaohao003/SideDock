@@ -169,6 +169,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             w.contentView = NSHostingView(rootView: SettingsView(state: state))
             settingsWindow = w
         }
+        // 设置窗口外观跟随面板主题
+        settingsWindow?.appearance = NSAppearance(named: state.settings.themeIsDark ? .darkAqua : .aqua)
         settingsWindow?.center()
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

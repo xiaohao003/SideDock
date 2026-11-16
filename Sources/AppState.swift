@@ -172,6 +172,7 @@ final class UIState: ObservableObject {
     @Published var todoDraft = ""
     @Published var todoPreset: Int = 0   // 0 无 1 今日 2 明日 3 一周
     @Published var todoFilter: Int = 1   // 0 全部 1 今日 2 明日 3 一周 4 历史(已完成)
+    @Published var todoHover: [UUID: Bool] = [:]   // 行悬停态(命令行工具链无 @State 宏插件)
     // 剪贴板(Maccy 式交互状态)
     @Published var clipboardCopiedID: UUID?
     @Published var clipSearch = ""
@@ -239,35 +240,57 @@ final class AppState: ObservableObject {
     }
 }
 
-// MARK: - 主题(渲染图取色)
+// MARK: - 主题(玻璃主题色板 · 与 Open Design 设计稿 tokens 一一对应)
+// 设计稿:.open-design/sidedock-macos-glassmorphism-12-96pt-472-519pt-sd-44-44-5-ta/
+// 玻璃层级 = NSVisualEffectView 真实取景模糊(面板底)+ 半透明 tint 叠加 + 发丝描边 + 顶部内侧高光
 
 struct ThemeColors {
-    let bg: Color          // 面板卡片底
-    let card: Color        // 内容卡片
-    let bar: Color         // Tab 容器底
+    let isDark: Bool
+    let bg: Color          // 面板玻璃 tint(叠加在 NSVisualEffectView 之上;再乘 backgroundOpacity)
+    let card: Color        // 内容卡片玻璃层
+    let cardHover: Color   // 内容卡片悬停层(亮度 +12%)
+    let bar: Color         // Tab 容器 / 分段控件玻璃底
     let pill: Color        // 未选中胶囊
     let text: Color
     let text2: Color
     let text3: Color
     let accent: Color
     let accent2: Color
+    let accentSoft: Color  // 徽章底 / 激活态玻璃
     let danger: Color
-    let border: Color
+    let warn: Color        // 下载中
+    let border: Color      // 发丝描边(卡片/容器共用)
+    let panelHighlight: Color // 面板顶部内侧高光
+    let panelBorderOut: Color // 面板外描边
 }
 
 enum Theme {
     static func colors(dark: Bool) -> ThemeColors {
         dark
         ? ThemeColors(
-            bg: Color(hex: 0x1C1C1F), card: Color(hex: 0x232326), bar: Color(hex: 0x1A1A1D),
-            pill: Color(hex: 0x2A2A2E), text: Color(hex: 0xE8E8EA), text2: Color(hex: 0x9A9AA0),
-            text3: Color(hex: 0x6E6E74), accent: Color(hex: 0x4A8DFF), accent2: Color(hex: 0x3B7BE8),
-            danger: Color(hex: 0xE5534B), border: Color(hex: 0x333338))
+            isDark: true,
+            bg: Color(hex: 0x16181F, alpha: 0.58),
+            card: Color(hex: 0xFFFFFF, alpha: 0.075), cardHover: Color(hex: 0xFFFFFF, alpha: 0.12),
+            bar: Color(hex: 0xFFFFFF, alpha: 0.06), pill: Color(hex: 0xFFFFFF, alpha: 0.08),
+            text: Color(hex: 0xF2F4F8), text2: Color(hex: 0xA8B0BD), text3: Color(hex: 0x6C7480),
+            accent: Color(hex: 0x4A8DFF), accent2: Color(hex: 0x3B7BE8),
+            accentSoft: Color(hex: 0x4A8DFF, alpha: 0.22),
+            danger: Color(hex: 0xFF6B61), warn: Color(hex: 0xF5A623),
+            border: Color(hex: 0xFFFFFF, alpha: 0.10),
+            panelHighlight: Color(hex: 0xFFFFFF, alpha: 0.10),
+            panelBorderOut: Color(hex: 0x000000, alpha: 0.40))
         : ThemeColors(
-            bg: Color(hex: 0xF5F5F7), card: Color(hex: 0xFFFFFF), bar: Color(hex: 0xEDEFF2),
-            pill: Color(hex: 0xECEDEF), text: Color(hex: 0x1C1C1E), text2: Color(hex: 0x6B6E75),
-            text3: Color(hex: 0x9CA3AF), accent: Color(hex: 0x3B82F6), accent2: Color(hex: 0x2B6BFF),
-            danger: Color(hex: 0xE5484D), border: Color(hex: 0xE5E5EA))
+            isDark: false,
+            bg: Color(hex: 0xF8FAFD, alpha: 0.72),
+            card: Color(hex: 0xFFFFFF, alpha: 0.55), cardHover: Color(hex: 0xFFFFFF, alpha: 0.72),
+            bar: Color(hex: 0x0F172A, alpha: 0.055), pill: Color(hex: 0x0F172A, alpha: 0.05),
+            text: Color(hex: 0x1C1C1E), text2: Color(hex: 0x555B66), text3: Color(hex: 0x8A909C),
+            accent: Color(hex: 0x3B82F6), accent2: Color(hex: 0x2B6BFF),
+            accentSoft: Color(hex: 0x3B82F6, alpha: 0.14),
+            danger: Color(hex: 0xE5484D), warn: Color(hex: 0xE8890C),
+            border: Color(hex: 0xFFFFFF, alpha: 0.62),
+            panelHighlight: Color(hex: 0xFFFFFF, alpha: 0.65),
+            panelBorderOut: Color(hex: 0x0F172A, alpha: 0.10))
     }
 }
 

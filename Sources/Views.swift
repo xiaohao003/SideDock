@@ -29,6 +29,36 @@ struct PanelContent: View {
 
 // MARK: - 通用小组件
 
+/// 玻璃卡片(设计稿「内容卡片玻璃层」):半透明填充 + 发丝描边 + 内顶高光 + 微投影
+struct GlassCardModifier: ViewModifier {
+    let theme: ThemeColors
+    var radius: CGFloat = 14
+    var highlighted = false   // 悬停态:玻璃层亮度 +12% + 投影上浮
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: radius)
+                        .fill(highlighted ? theme.cardHover : theme.card)
+                    RoundedRectangle(cornerRadius: radius)
+                        .fill(LinearGradient(colors: [Color.white.opacity(theme.isDark ? 0.08 : 0.30),
+                                                      Color.clear],
+                                             startPoint: .top, endPoint: .center))
+                }
+                // 微投影:浅 1/3 6% · 深 1/3 18%
+                .shadow(color: .black.opacity(theme.isDark ? 0.18 : 0.06), radius: highlighted ? 6 : 3, y: 1)
+            )
+            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(theme.border))
+    }
+}
+
+extension View {
+    func glassCard(_ theme: ThemeColors, radius: CGFloat = 14, highlighted: Bool = false) -> some View {
+        modifier(GlassCardModifier(theme: theme, radius: radius, highlighted: highlighted))
+    }
+}
+
 struct CountRow<Actions: View>: View {
     let title: String
     @ViewBuilder var actions: () -> Actions
@@ -55,10 +85,11 @@ struct ActionLink: View {
     }
 }
 
-/// 分段控件(渲染证据:灰底胶囊容器 + 白色选中胶囊)
+/// 分段控件(玻璃容器 + 实心选中胶囊:浅色白 / 深色白 15%)
 struct SegmentedBar: View {
     let options: [String]
     let selection: Int
+    let theme: ThemeColors
     let onChange: (Int) -> Void
 
     var body: some View {
@@ -72,16 +103,22 @@ struct SegmentedBar: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                         .background(
-                            Capsule().fill(i == selection ? Color.white : Color.clear)
+                            Capsule().fill(i == selection
+                                           ? (theme.isDark ? Color.white.opacity(0.15) : Color.white)
+                                           : Color.clear)
                                 .shadow(color: .black.opacity(i == selection ? 0.10 : 0), radius: 2, y: 1)
                         )
-                        .foregroundStyle(i == selection ? .primary : .secondary)
+                        .foregroundStyle(i == selection ? Color(theme.text) : Color(theme.text2))
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(3)
-        .background(Capsule().fill(Color.primary.opacity(0.06)))
+        .background(
+            Capsule().fill(theme.bar)
+                .shadow(color: .black.opacity(theme.isDark ? 0.15 : 0.04), radius: 2, y: 1)
+        )
+        .overlay(Capsule().strokeBorder(theme.border))
     }
 }
 
@@ -104,11 +141,12 @@ struct TodoTab: View {
                     .overlay(Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
                     .onTapGesture { add() }
                 TextField("添加待办，回车保存", text: state.uiBind(\.todoDraft))
+                    .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .onSubmit(add)
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
+            .glassCard(theme)
 
             // 到期预设
             HStack(spacing: 6) {
@@ -181,9 +219,9 @@ struct TodoTab: View {
             Text(title)
                 .font(.system(size: 11, weight: on ? .semibold : .regular))
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Capsule().fill(on
-                    ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2], startPoint: .top, endPoint: .bottom))
-                    : AnyShapeStyle(theme.pill)))
+                .background(glassPillFill(on))
+                .shadow(color: on ? theme.accent.opacity(theme.isDark ? 0.45 : 0.32) : .clear,
+                        radius: on ? 6 : 0, x: 0, y: on ? 2 : 0)
                 .foregroundStyle(on ? .white : theme.text2)
         }
         .buttonStyle(.plain)
@@ -197,64 +235,36 @@ struct TodoTab: View {
         } label: {
             HStack(spacing: 3) {
                 Text(title).font(.system(size: 11, weight: on ? .semibold : .regular))
-                Text("\(count)").font(.system(size: 10, weight: .semibold))
+                Text("\(count)").font(.system(size: 10, weight: .semibold)).monospacedDigit()
                     .padding(.horizontal, 4).padding(.vertical, 1)
-                    .background(Capsule().fill(on ? Color.white.opacity(0.25) : Color.primary.opacity(0.06)))
+                    .background(Capsule().fill(on ? Color.white.opacity(0.25)
+                                                  : (theme.isDark ? Color.white.opacity(0.09)
+                                                                  : Color.primary.opacity(0.06))))
             }
             .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(Capsule().fill(on
-                ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2], startPoint: .top, endPoint: .bottom))
-                : AnyShapeStyle(theme.pill)))
+            .background(glassPillFill(on))
+            .shadow(color: on ? theme.accent.opacity(theme.isDark ? 0.45 : 0.32) : .clear,
+                    radius: on ? 6 : 0, x: 0, y: on ? 2 : 0)
             .foregroundStyle(on ? .white : theme.text2)
         }
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
+    /// 玻璃胶囊填充:选中 = 品牌蓝渐变;未选中 = pill 玻璃底
+    private func glassPillFill(_ on: Bool) -> AnyShapeStyle {
+        on
+        ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2],
+                                       startPoint: .top, endPoint: .bottom))
+        : AnyShapeStyle(theme.pill)
+    }
+
+    // 待办行(玻璃卡片 + 悬停态:亮度提升、删除钮显现)
     private func todoRow(_ item: TodoItem) -> some View {
-        HStack(spacing: 10) {
-            Button {
-                store.toggle(item.id)
-            } label: {
-                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(item.done ? theme.accent : theme.text3)
-            }
-            .buttonStyle(.plain)
-
-            Text(item.title)
-                .font(.system(size: 13, weight: .medium))
-                .strikethrough(item.done)
-                .foregroundStyle(item.done ? theme.text3 : theme.text)
-
-            Spacer()
-
-            if item.done {
-                Button { store.toggle(item.id) } label: {
-                    Text("标记为未完成").font(.system(size: 10)).foregroundStyle(theme.text3)
-                }
-                .buttonStyle(.plain)
-            } else if let due = item.due {
-                if due < Date() {
-                    Text("已逾期").font(.system(size: 11, weight: .medium)).foregroundStyle(theme.danger)
-                } else if Calendar.current.isDateInToday(due) || Calendar.current.isDateInTomorrow(due) {
-                    HStack(spacing: 2) {
-                        Image(systemName: "bell.fill").font(.system(size: 9))
-                        Text(due.formatted(date: .omitted, time: .shortened)).font(.system(size: 11))
-                    }
-                    .foregroundStyle(theme.accent)
-                }
-            }
-
-            Button {
-                store.items.removeAll { $0.id == item.id }
-            } label: {
-                Image(systemName: "xmark").font(.system(size: 9)).foregroundStyle(theme.text3.opacity(0.7))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
+        TodoRowView(item: item, theme: theme,
+                    hovered: Binding(get: { state.ui.todoHover[item.id] ?? false },
+                                     set: { state.ui.todoHover[item.id] = $0 }),
+                    onToggle: { store.toggle(item.id) },
+                    onRemove: { store.items.removeAll { $0.id == item.id } })
     }
 
     private func add() {
@@ -269,6 +279,62 @@ struct TodoTab: View {
         }
         store.add(text, due: due)
         state.ui.todoDraft = ""
+    }
+}
+
+// 待办行(玻璃卡片;悬停 = 玻璃层提亮 + 删除钮显现;悬停态存 UIState,工具链无 @State 宏)
+private struct TodoRowView: View {
+    let item: TodoItem
+    let theme: ThemeColors
+    @Binding var hovered: Bool
+    let onToggle: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onToggle) {
+                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(item.done ? theme.accent : theme.text3)
+            }
+            .buttonStyle(.plain)
+
+            Text(item.title)
+                .font(.system(size: 13, weight: .medium))
+                .strikethrough(item.done)
+                .foregroundStyle(item.done ? theme.text3 : theme.text)
+
+            Spacer(minLength: 0)
+
+            if item.done {
+                Button(action: onToggle) {
+                    Text("标记为未完成").font(.system(size: 10)).foregroundStyle(theme.text3)
+                }
+                .buttonStyle(.plain)
+            } else if let due = item.due {
+                if due < Date() {
+                    Text("已逾期").font(.system(size: 11, weight: .medium)).foregroundStyle(theme.danger)
+                } else if Calendar.current.isDateInToday(due) || Calendar.current.isDateInTomorrow(due) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bell.fill").font(.system(size: 9))
+                        Text(due.formatted(date: .omitted, time: .shortened))
+                            .font(.system(size: 11)).monospacedDigit()
+                    }
+                    .foregroundStyle(theme.accent)
+                }
+            }
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark").font(.system(size: 9))
+                    .foregroundStyle(theme.text3)
+            }
+            .buttonStyle(.plain)
+            .opacity(hovered ? 1 : 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .glassCard(theme, highlighted: hovered)
+        .animation(.easeInOut(duration: 0.12), value: hovered)
+        .onHover { hovered = $0 }
     }
 }
 
@@ -289,6 +355,7 @@ struct NotesTab: View {
             if state.ui.notesAdding {
                 HStack(spacing: 8) {
                     TextField("回车保存,首行为标题", text: state.uiBind(\.notesDraft))
+                        .textFieldStyle(.plain)
                         .font(.system(size: 13)).onSubmit(addNote)
                     Button(action: addNote) {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 18)).foregroundStyle(theme.accent)
@@ -296,7 +363,7 @@ struct NotesTab: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
+                .glassCard(theme, radius: 12)
             }
 
             if store.notes.isEmpty {
@@ -322,7 +389,7 @@ struct NotesTab: View {
                     }
                 }
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
+                .glassCard(theme)
             }
         }
     }
@@ -347,7 +414,7 @@ struct DownloadsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                SegmentedBar(options: ["最近", "全部"], selection: state.ui.downloadsAll ? 1 : 0) {
+                SegmentedBar(options: ["最近", "全部"], selection: state.ui.downloadsAll ? 1 : 0, theme: theme) {
                     state.ui.downloadsAll = ($0 == 1)
                     store.recentOnly = !state.ui.downloadsAll
                     store.refresh()
@@ -360,6 +427,7 @@ struct DownloadsTab: View {
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(Capsule().fill(theme.pill))
+                .overlay(Capsule().strokeBorder(theme.border))
                 Button {
                     NSWorkspace.shared.open(DownloadsStore.downloadsURL)
                 } label: {
@@ -453,7 +521,6 @@ struct DownloadRow: View {
             .frame(width: 40, height: 40)
             .clipShape(RoundedRectangle(cornerRadius: 9))
             .background(RoundedRectangle(cornerRadius: 9).fill(theme.pill))
-
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name).lineLimit(1).truncationMode(.middle)
                     .font(.system(size: 13, weight: .medium)).foregroundStyle(theme.text)
@@ -470,7 +537,7 @@ struct DownloadRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10).padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
+        .glassCard(theme, radius: 12)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { store.open(file) }
         .contextMenu {
@@ -495,7 +562,7 @@ struct ShelfTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SegmentedBar(options: ["文件", "剪贴板"], selection: state.ui.shelfSegmentClips ? 1 : 0) {
+            SegmentedBar(options: ["文件", "剪贴板"], selection: state.ui.shelfSegmentClips ? 1 : 0, theme: theme) {
                 state.ui.shelfSegmentClips = ($0 == 1)
             }
 
@@ -556,7 +623,7 @@ struct ShelfTab: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12).padding(.horizontal, 8)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
+                        .glassCard(theme)
                         .contentShape(Rectangle())
                         .draggable(item.url)
                         .contextMenu {
@@ -607,6 +674,7 @@ struct MaccyClipboardList: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Capsule().fill(theme.pill))
+            .overlay(Capsule().strokeBorder(theme.border))
 
             // 标题行(Maccy:清除 = 清未固定;⇧/全部清除是增强)
             HStack(spacing: 8) {
@@ -683,8 +751,8 @@ struct MaccyClipboardList: View {
             .frame(maxWidth: .infinity)
         }
         .background(RoundedRectangle(cornerRadius: 8)
-            .fill(selected ? theme.accent.opacity(0.15)
-                           : (hovered ? Color.primary.opacity(0.06) : Color.clear)))
+            .fill(selected ? theme.accentSoft
+                           : (hovered ? theme.cardHover : Color.clear)))
         .overlay(alignment: .trailing) {
             HStack(spacing: 2) {
                 hoverButton(e.isPinned ? "pin.slash" : "pin",
@@ -712,7 +780,11 @@ struct MaccyClipboardList: View {
             Image(systemName: symbol)
                 .font(.system(size: 9)).foregroundStyle(theme.text2)
                 .padding(4)
-                .background(Circle().fill(theme.bg.opacity(0.92)))
+                .background(
+                    Circle().fill(theme.card)
+                        .shadow(color: .black.opacity(theme.isDark ? 0.20 : 0.08), radius: 2, y: 1)
+                )
+                .overlay(Circle().strokeBorder(theme.border))
         }
         .buttonStyle(.plain)
         .help(tip)
@@ -823,7 +895,7 @@ struct PasswordsTab: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12))
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
+                .glassCard(theme, radius: 12)
             }
 
             if let toast = state.ui.vaultToast {
@@ -846,7 +918,7 @@ struct PasswordsTab: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(state.settings.themeIsDark ? theme.accent.opacity(0.18) : Color(hex: 0xDDEBFF))
+                        .fill(theme.accentSoft)
                     Image(systemName: "key.fill").font(.system(size: 15)).foregroundStyle(theme.accent)
                 }
                 .frame(width: 36, height: 36)
@@ -892,7 +964,7 @@ struct PasswordsTab: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
+        .glassCard(theme)
         .contextMenu {
             Button("右键编辑重新输入密码") { state.ui.vaultEditingFor = e.id }
             Divider()

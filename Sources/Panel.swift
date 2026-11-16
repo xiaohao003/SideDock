@@ -36,6 +36,60 @@ final class SidebarPanel: NSPanel {
     }
 }
 
+// MARK: - 真实取景模糊(NSVisualEffectView)
+// 面板为透明 NSPanel(backgroundColor = .clear),behindWindow 模糊即真实毛玻璃透出桌面
+
+struct VisualEffectBackground: NSViewRepresentable {
+    let dark: Bool
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.isEmphasized = false
+        updateNSView(view, context: context)
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        // 浅色 .sidebar / 深色 .hudWindow:对应设计稿 blur 28(sat 180%)与 blur 30(sat 150%)的观感
+        view.material = dark ? .hudWindow : .sidebar
+    }
+}
+
+// MARK: - 玻璃面板背景(材质 + tint + 顶部内侧高光 + 发丝描边 + 双层投影)
+
+struct GlassPanelBackground: View {
+    let theme: ThemeColors
+    let opacityScale: Double   // 设置里的 backgroundOpacity,乘在 tint 上
+    var cornerRadius: CGFloat = 20
+
+    var body: some View {
+        ZStack {
+            VisualEffectBackground(dark: theme.isDark)
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(theme.bg.opacity(opacityScale))
+            // 顶部内侧高光(luminous edge)
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(LinearGradient(colors: [theme.panelHighlight, Color.clear],
+                                     startPoint: .top, endPoint: .center))
+                .allowsHitTesting(false)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(theme.panelBorderOut, lineWidth: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(theme.border, lineWidth: 1)
+                .padding(0.5)
+        )
+        // 双层投影:环境影 + 接触影
+        .shadow(color: .black.opacity(theme.isDark ? 0.60 : 0.38), radius: 28, x: -6, y: 14)
+        .shadow(color: .black.opacity(theme.isDark ? 0.32 : 0.12), radius: 10, x: -2, y: 4)
+    }
+}
+
 // MARK: - 控制器
 
 final class SidebarController: ObservableObject {
@@ -205,6 +259,7 @@ struct PanelRootView: View {
 }
 
 // MARK: - 把手(观测:12pt 宽、96pt 高圆角竖条、握点、贴面板右缘)
+// 玻璃化:材质底 + 半透明填充 + 发丝描边;悬停提亮 / 拖放目标品牌蓝
 
 struct HandleColumn: View {
     @ObservedObject var controller: SidebarController
@@ -212,21 +267,36 @@ struct HandleColumn: View {
 
     private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
 
+    private var fill: Color {
+        if state.ui.handleDropTargeted { return theme.accent.opacity(0.78) }
+        if state.ui.handleHovering { return Color.white.opacity(theme.isDark ? 0.18 : 0.62) }
+        return Color.white.opacity(theme.isDark ? 0.10 : 0.44)
+    }
+
+    private var dotColor: Color {
+        if state.ui.handleDropTargeted { return .white }
+        return theme.isDark ? Color.white.opacity(0.55) : Color(hex: 0x1C202C, alpha: 0.48)
+    }
+
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4.5) {
             ForEach(0..<6, id: \.self) { _ in
-                Circle()
-                    .fill(state.ui.handleHovering ? theme.text.opacity(0.85) : theme.text.opacity(0.45))
-                    .frame(width: 3, height: 3)
+                Circle().fill(dotColor).frame(width: 3, height: 3)
             }
         }
         .frame(width: SidebarController.handleWidth, height: SidebarController.handleHeight)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(state.ui.handleDropTargeted
-                      ? theme.accent.opacity(0.75)
-                      : (state.ui.handleHovering ? theme.bar : theme.bg.opacity(0.85)))
-                .shadow(color: .black.opacity(0.35), radius: 4, x: -1, y: 1)
+            ZStack {
+                VisualEffectBackground(dark: theme.isDark)
+                RoundedRectangle(cornerRadius: 6).fill(fill)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.28), .clear],
+                                         startPoint: .top, endPoint: .center))
+                    .allowsHitTesting(false)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(theme.isDark ? Color.white.opacity(0.14) : Color.white.opacity(0.55)))
+            .shadow(color: .black.opacity(theme.isDark ? 0.40 : 0.22), radius: 6, x: -1, y: 2)
         )
         .contentShape(Rectangle())
         .onHover { entered in
@@ -251,7 +321,7 @@ struct HandleColumn: View {
     }
 }
 
-// MARK: - 面板主体(渲染证据:圆角卡片 = 头部 + Tab 栏 + 内容 + 底部音乐卡)
+// MARK: - 面板主体(玻璃卡片 = 头部 + Tab 栏 + 内容 + 底部音乐卡)
 
 struct PanelBody: View {
     @ObservedObject var state: AppState
@@ -271,9 +341,8 @@ struct PanelBody: View {
         .padding(.trailing, 5)   // 与右缘把手留出间距
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(theme.bg)
-                .shadow(color: .black.opacity(0.28), radius: 18, x: -3, y: 4)
+            GlassPanelBackground(theme: theme,
+                                 opacityScale: state.settings.backgroundOpacity)
         )
         .overlay(alignment: .leading) { ResizeEdge(axis: .width, controller: controller) }
         .overlay(alignment: .bottom) { ResizeEdge(axis: .height, controller: controller) }
@@ -299,39 +368,42 @@ struct PanelHeader: View {
                 Text(dateText).font(.system(size: 20, weight: .bold)).foregroundStyle(theme.text)
             }
             Spacer(minLength: 0)
-            Button {
+            headerButton("gearshape", active: false, help: "设置") {
                 NotificationCenter.default.post(name: .sideDockOpenSettings, object: nil)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 15))
-                    .foregroundStyle(theme.text2)
             }
-            .buttonStyle(.plain)
-            .help("设置")
-            Button {
+            headerButton(state.settings.pinned ? "pin.fill" : "pin",
+                         active: state.settings.pinned,
+                         help: state.settings.pinned ? "常驻模式(已固定,不自动收起)" : "点击固定面板") {
                 state.settings.pinned.toggle()
-            } label: {
-                Image(systemName: state.settings.pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 15))
-                    .foregroundStyle(state.settings.pinned ? theme.text : theme.text2)
             }
-            .buttonStyle(.plain)
-            .help(state.settings.pinned ? "常驻模式(已固定,不自动收起)" : "点击固定面板")
-            Button {
+            headerButton("chevron.right", active: false, help: "收起侧边栏") {
                 controller.collapse()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(theme.text2)
             }
-            .buttonStyle(.plain)
-            .help("收起侧边栏")
         }
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 5)
                 .onChanged { v in controller.dragHandleBy(dy: v.translation.height) }
         )
+    }
+
+    /// 玻璃圆形图标钮(30×30,激活态品牌蓝玻璃)
+    @ViewBuilder
+    private func headerButton(_ symbol: String, active: Bool, help: String,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: active ? .semibold : .medium))
+                .foregroundStyle(active ? theme.accent : theme.text2)
+                .frame(width: 30, height: 30)
+                .background(
+                    Capsule().fill(active ? theme.accentSoft : theme.card)
+                        .shadow(color: .black.opacity(theme.isDark ? 0.18 : 0.06), radius: 2, y: 1)
+                )
+                .overlay(Capsule().strokeBorder(active ? Color.clear : theme.border))
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     private var weekdayText: String {
@@ -345,13 +417,18 @@ struct PanelHeader: View {
     }
 }
 
-// SD 徽标(渲染证据:蓝渐变圆角方块 + 白色粗体 SD)
+// SD 徽标(蓝渐变圆角方块 + 内顶高光 + 品牌蓝投影)
 struct SDLogo: View {
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 11)
                 .fill(LinearGradient(colors: [Color(hex: 0x4A9EFF), Color(hex: 0x2F7BFF)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
+                .shadow(color: Color(hex: 0x2F7BFF, alpha: 0.35), radius: 8, x: 0, y: 3)
+            RoundedRectangle(cornerRadius: 11)
+                .fill(LinearGradient(colors: [Color.white.opacity(0.30), Color.clear],
+                                     startPoint: .top, endPoint: .center))
+                .allowsHitTesting(false)
             Text("SD").font(.system(size: 15, weight: .heavy, design: .rounded)).foregroundStyle(.white)
         }
     }
@@ -373,7 +450,11 @@ struct PanelTabBar: View {
             tabButton(.passwords, badge: state.vault.entries.count)
         }
         .padding(3)
-        .background(Capsule().fill(theme.bar))
+        .background(
+            Capsule().fill(theme.bar)
+                .shadow(color: .black.opacity(theme.isDark ? 0.15 : 0.04), radius: 2, y: 1)
+        )
+        .overlay(Capsule().strokeBorder(theme.border))
     }
 
     private var pendingTodoCount: Int {
@@ -392,8 +473,9 @@ struct PanelTabBar: View {
                 if let badge, badge > 0 {
                     Text("\(badge)")
                         .font(.system(size: 9, weight: .semibold))
+                        .monospacedDigit()
                         .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Capsule().fill(selected ? Color.white.opacity(0.25) : theme.accent.opacity(0.15)))
+                        .background(Capsule().fill(selected ? Color.white.opacity(0.25) : theme.accentSoft))
                         .foregroundStyle(selected ? .white : theme.accent)
                 }
             }
@@ -404,6 +486,9 @@ struct PanelTabBar: View {
                                                               startPoint: .top, endPoint: .bottom))
                                : AnyShapeStyle(Color.clear))
             )
+            // 选中胶囊:品牌蓝投影(设计稿 0 3 8 rgba(47,110,255,0.35))
+            .shadow(color: selected ? theme.accent.opacity(theme.isDark ? 0.45 : 0.35) : .clear,
+                    radius: selected ? 8 : 0, x: 0, y: selected ? 3 : 0)
             .foregroundStyle(selected ? .white : theme.text2)
         }
         .buttonStyle(.plain)
@@ -447,11 +532,18 @@ struct MusicCard: View {
                     Spacer(minLength: 0)
                 }
                 GeometryReader { geo in
+                    let progress = max(0, min(1, snap.elapsed / max(snap.duration, 0.1)))
                     ZStack(alignment: .leading) {
-                        Capsule().fill(theme.border)
+                        Capsule().fill(theme.bar)
                         Capsule().fill(LinearGradient(colors: [theme.accent, Color(hex: 0x22D3EE)],
                                                       startPoint: .leading, endPoint: .trailing))
-                            .frame(width: max(0, min(1, snap.elapsed / max(snap.duration, 0.1))) * geo.size.width)
+                            .frame(width: progress * geo.size.width)
+                        // 玻璃滑块(8pt 白点)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 8, height: 8)
+                            .shadow(color: .black.opacity(0.30), radius: 2, y: 1)
+                            .offset(x: progress * geo.size.width - 4)
                     }
                 }
                 .frame(height: 4)
@@ -489,7 +581,17 @@ struct MusicCard: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16).fill(theme.card))
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16).fill(theme.card)
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(LinearGradient(colors: [Color.white.opacity(theme.isDark ? 0.08 : 0.30), Color.clear],
+                                         startPoint: .top, endPoint: .center))
+                    .allowsHitTesting(false)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.border))
+            .shadow(color: .black.opacity(theme.isDark ? 0.18 : 0.07), radius: 4, y: 2)
+        )
         .onAppear { music.startWatch() }
     }
 
