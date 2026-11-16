@@ -99,12 +99,26 @@ enum PanelTab: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+// 主题模式:跟随系统 / 浅色 / 深色(themeIsDark 是"当前生效值",视图统一读它)
+enum ThemeMode: String, Codable, CaseIterable {
+    case system, light, dark
+    var title: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+}
+
 struct Settings: Codable {
     var panelWidth: Double = 472
     var panelHeight: Double = 519
     var handleCenterY: Double = 860   // 把手中心在屏幕上的纵向位置(观测默认约屏高 60%)
     var backgroundOpacity: Double = 1.0
-    var themeIsDark: Bool = false     // 渲染证据:默认浅色主题
+    var themeIsDark: Bool = false     // 当前生效主题(由 themeMode 解析;视图统一读这里)
+    var themeMode: ThemeMode = .system  // 默认跟随系统
+    var clipboardInMenuBar: Bool = true // 菜单栏剪贴板独立入口
     var autoExpand: Bool = true       // 悬停自动展开
     var pinned: Bool = true           // 观测默认 pinned=1
     var clickOutsideKeepsOpen: Bool = false
@@ -118,8 +132,8 @@ struct Settings: Codable {
 
     // 自定义解码:缺字段回退默认值,避免新增设置项导致旧配置整体重置
     private enum CodingKeys: String, CodingKey {
-        case panelWidth, panelHeight, handleCenterY, backgroundOpacity, themeIsDark
-        case autoExpand, pinned, clickOutsideKeepsOpen, shelfBarVisible
+        case panelWidth, panelHeight, handleCenterY, backgroundOpacity, themeIsDark, themeMode
+        case autoExpand, pinned, clickOutsideKeepsOpen, shelfBarVisible, clipboardInMenuBar
         case hotkey, tab, shelfBarFrame, autoPaste
     }
 
@@ -132,15 +146,31 @@ struct Settings: Codable {
         handleCenterY = try c.decodeIfPresent(Double.self, forKey: .handleCenterY) ?? 860
         backgroundOpacity = try c.decodeIfPresent(Double.self, forKey: .backgroundOpacity) ?? 1.0
         themeIsDark = try c.decodeIfPresent(Bool.self, forKey: .themeIsDark) ?? false
+        // 旧配置无 themeMode:从原 themeIsDark 推导,不丢用户选择
+        themeMode = try c.decodeIfPresent(ThemeMode.self, forKey: .themeMode)
+            ?? (themeIsDark ? .dark : .light)
         autoExpand = try c.decodeIfPresent(Bool.self, forKey: .autoExpand) ?? true
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? true
         clickOutsideKeepsOpen = try c.decodeIfPresent(Bool.self, forKey: .clickOutsideKeepsOpen) ?? false
         shelfBarVisible = try c.decodeIfPresent(Bool.self, forKey: .shelfBarVisible) ?? false
+        clipboardInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .clipboardInMenuBar) ?? true
         hotkey = try c.decodeIfPresent(Hotkey.self, forKey: .hotkey)
         tab = try c.decodeIfPresent(PanelTab.self, forKey: .tab) ?? .todo
         shelfBarFrame = try c.decodeIfPresent(NSRect.self, forKey: .shelfBarFrame)
             ?? NSRect(x: 200, y: 400, width: 260, height: 56)
         autoPaste = try c.decodeIfPresent(Bool.self, forKey: .autoPaste) ?? true
+    }
+
+    /// 系统当前是否深色外观
+    static func systemIsDark() -> Bool {
+        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+
+    /// 跟随系统模式下,把生效主题同步为系统外观
+    mutating func syncEffectiveTheme() {
+        guard themeMode == .system else { return }
+        let dark = Self.systemIsDark()
+        if themeIsDark != dark { themeIsDark = dark }
     }
 }
 
@@ -220,6 +250,23 @@ final class AppState: ObservableObject {
                 settings.handleCenterY = vis.midY + vis.height * 0.1
             }
         }
+        settings.syncEffectiveTheme()
+    }
+
+    /// 设置页选主题:同时落模式与生效值(跟随系统则立即按当前系统外观解析)
+    func applyThemeMode(_ mode: ThemeMode) {
+        var s = settings
+        s.themeMode = mode
+        s.themeIsDark = (mode == .system) ? Settings.systemIsDark() : (mode == .dark)
+        settings = s
+    }
+
+    /// 系统外观切换通知 → 跟随系统模式同步
+    func syncEffectiveTheme() {
+        var s = settings
+        let before = s.themeIsDark
+        s.syncEffectiveTheme()
+        if s.themeIsDark != before { settings = s }
     }
 
     func persistSettings() {

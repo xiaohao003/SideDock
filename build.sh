@@ -19,7 +19,7 @@ swiftc -O \
   -framework Security -framework ServiceManagement -framework UserNotifications \
   Sources/main.swift Sources/AppState.swift Sources/Panel.swift Sources/Views.swift \
   Sources/Stores.swift Sources/Downloads.swift Sources/ShelfBarController.swift \
-  Sources/MusicController.swift Sources/PasteHelper.swift \
+  Sources/MusicController.swift Sources/PasteHelper.swift Sources/ClipboardBar.swift \
   -o "$BUILD/SideDock"
 
 # MediaHelper 以源码分发(必须经 Apple 签名的 /usr/bin/swift 解释执行,

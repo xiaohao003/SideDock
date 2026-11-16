@@ -1000,9 +1000,13 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("外观与行为") {
-                Picker("主题", selection: state.ui.settingsBinding(\.themeIsDark)) {
-                    Text("浅色").tag(false)
-                    Text("深色").tag(true)
+                Picker("主题", selection: Binding(
+                    get: { state.settings.themeMode },
+                    set: { state.applyThemeMode($0) }
+                )) {
+                    ForEach(ThemeMode.allCases, id: \.self) { mode in
+                        Text(mode.title).tag(mode)
+                    }
                 }
                 .pickerStyle(.segmented)
                 HStack {
@@ -1011,7 +1015,7 @@ struct SettingsView: View {
                     Text("\(Int(state.settings.backgroundOpacity * 100))%")
                         .monospacedDigit().frame(width: 40)
                 }
-                Text("数值越低越通透,毛玻璃会透出桌面模糊效果")
+                Text("跟随系统:随 macOS 浅色/深色外观自动切换;面板、设置窗口与菜单栏剪贴板同步生效")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -1027,6 +1031,9 @@ struct SettingsView: View {
             }
 
             Section("剪贴板") {
+                Toggle("在顶部菜单栏显示剪贴板", isOn: state.ui.settingsBinding(\.clipboardInMenuBar))
+                Text("菜单栏图标点击弹出独立剪贴板面板;行为与侧边栏“暂存 → 剪贴板”一致")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("选中历史项后自动粘贴到前台应用", isOn: Binding(
                     get: { state.settings.autoPasteEnabled },
                     set: { state.settings.autoPaste = $0 }

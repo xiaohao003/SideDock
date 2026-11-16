@@ -3,6 +3,7 @@
 //   AppDelegate / 状态栏菜单 / 全局与本地事件监听 / TCC 引导
 // 注:无 nib 的 AppKit 应用需手动装配 delegate(不适用 @main 默认装配)
 import AppKit
+import Combine
 import SwiftUI
 import ServiceManagement
 
@@ -15,11 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState.shared
     var sidebar: SidebarController?
     var shelfBarController: ShelfBarController?
+    var clipboardBar: ClipboardBarController?
     var settingsWindow: NSWindow?
     var statusItem: NSStatusItem?
     var localKeyMonitor: Any?
     var globalMouseMonitor: Any?
     var localMouseMonitor: Any?
+    var themeCancellables = Set<Combine.AnyCancellable>()
+    var themeObserver: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -30,8 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shelfBarController = ShelfBarController(state: state)
         if state.settings.shelfBarVisible { shelfBarController?.show() }
 
+        clipboardBar = ClipboardBarController(state: state)
+        clipboardBar?.setEnabled(state.settings.clipboardInMenuBar)
+
         setupStatusItem()
         setupEventMonitors()
+        setupThemeSync()
         state.music.startWatch()   // 面板未展开时也持续跟踪,展开即有数据
 
         NotificationCenter.default.addObserver(
@@ -157,6 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 渲染期把窗口 appearance 跟着主题切,深色变体才画得对
         func apply(_ job: (file: String, tab: PanelTab, dark: Bool, clip: Bool)) {
+            // 同时固定模式:避免"跟随系统"的同步逻辑在渲染期改写生效主题
+            state.settings.themeMode = job.dark ? .dark : .light
             state.settings.themeIsDark = job.dark
             state.settings.tab = job.tab
             state.ui.shelfSegmentClips = job.clip
@@ -199,6 +209,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 状态栏(证据: statusItemWithLength: / toggleSidebar / toggleShelfBar /
     // toggleLaunchAtLogin / openSettings / 打开系统设置)
+    // MARK: 主题联动
+    // 生效主题(themeIsDark)变化来源:设置页三选切换 / 系统外观切换(跟随系统模式)。
+    // SwiftUI 内容颜色由 @Published settings 自动驱动;这里只负责原生窗口外观同步:
+    // 设置窗口与菜单栏剪贴板面板(侧边栏面板由 SidebarController 自己的 sink 处理)。
+    private func setupThemeSync() {
+        themeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main
+        ) { [weak state] _ in
+            state?.syncEffectiveTheme()
+        }
+
+        state.$settings
+            .map(\.themeIsDark)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] dark in
+                let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                self?.settingsWindow?.appearance = appearance
+                self?.clipboardBar?.applyAppearance()
+            }
+            .store(in: &themeCancellables)
+
+        state.$settings
+            .map(\.clipboardInMenuBar)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] on in
+                self?.clipboardBar?.setEnabled(on)
+            }
+            .store(in: &themeCancellables)
+    }
+
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = Self.sidebarTemplateIcon()
