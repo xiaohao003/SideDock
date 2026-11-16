@@ -699,12 +699,27 @@ struct MaccyClipboardList: View {
         HStack(spacing: 0) {
             Button { select(e) } label: {
                 HStack(spacing: 8) {
-                    if let img = AppIconCache.icon(forBundle: e.sourceBundle) {
+                    if e.isImage {
+                        // 图片条目:直接显示缩略图(Maccy 同)
+                        if let path = e.imagePath, let img = NSImage(contentsOfFile: path) {
+                            Image(nsImage: img)
+                                .resizable().aspectRatio(contentMode: .fill)
+                                .frame(width: 36, height: 22)
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                                .overlay(RoundedRectangle(cornerRadius: 3)
+                                    .strokeBorder(theme.border, lineWidth: 0.5))
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.system(size: 12)).foregroundStyle(theme.text3)
+                        }
+                    } else if let img = AppIconCache.icon(forBundle: e.sourceBundle) {
                         Image(nsImage: img).resizable().frame(width: 16, height: 16)
                     }
-                    Text(e.text.replacingOccurrences(of: "\n", with: " "))
-                        .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
-                        .foregroundStyle(theme.text)
+                    if !e.isImage {
+                        Text(e.text.replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
+                            .foregroundStyle(theme.text)
+                    }
                     Spacer(minLength: 0)
                     if e.isPinned {
                         Image(systemName: "pin.fill")

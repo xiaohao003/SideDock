@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
         setupEventMonitors()
         setupThemeSync()
+        state.clipboard.startWatching()   // 剪贴板监听必须在启动时挂上(轮询 changeCount)
         state.music.startWatch()   // 面板未展开时也持续跟踪,展开即有数据
 
         NotificationCenter.default.addObserver(

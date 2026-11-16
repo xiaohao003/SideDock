@@ -258,8 +258,10 @@ struct ClipEntry: Codable, Identifiable, Equatable {
     var pinnedAt: Date?
     var sourceBundle: String?  // 复制时的前台应用(frontmostApplication)
     var sourceName: String?
+    var imagePath: String?     // 图片剪贴:PNG 落盘路径(Maccy 同样记录图片)
 
     var isPinned: Bool { pinned ?? false }
+    var isImage: Bool { imagePath != nil }
 }
 
 final class ClipboardStore: ObservableObject, JSONStore {
@@ -285,30 +287,65 @@ final class ClipboardStore: ObservableObject, JSONStore {
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
         lastChangeCount = pb.changeCount
-        guard let text = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty else { return }
-        // 来源应用(Maccy: frontmostApplication;跳过自身)
         let front = NSWorkspace.shared.frontmostApplication
         let bundle = front?.bundleIdentifier
         let name = front?.localizedName
-        let trimmed = String(text.prefix(4000))
 
-        // 去重:已有相同内容 → 移到顶部;已固定的留在固定区并刷新时间
-        if let idx = entries.firstIndex(where: { $0.text == trimmed }) {
+        // 文本优先(Maccy 同);无文本但含图片 → 记录图片条目
+        if let text = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            record(ClipEntry(text: String(text.prefix(4000)), sourceBundle: bundle, sourceName: name))
+            return
+        }
+        if let image = imageFromPasteboard(pb), let path = saveImagePNG(image) {
+            record(ClipEntry(text: "图片", sourceBundle: bundle, sourceName: name, imagePath: path))
+        }
+    }
+
+    /// 去重:已有相同内容 → 移到顶部;已固定的留在固定区并刷新时间
+    private func record(_ entry: ClipEntry) {
+        if let idx = entries.firstIndex(where: { $0.text == entry.text && $0.imagePath == nil && entry.imagePath == nil }) {
             let wasPinned = entries[idx].isPinned
-            entries.remove(at: idx)
+            let old = entries.remove(at: idx)
+            unlinkImage(old)   // 文本去重不会走到这,防御图片路径泄漏
+            var fresh = entry
             if wasPinned {
-                entries.append(ClipEntry(text: trimmed, copiedAt: Date(), pinned: true,
-                                         pinnedAt: Date(), sourceBundle: bundle, sourceName: name))
+                fresh.pinned = true
+                fresh.pinnedAt = Date()
+                entries.append(fresh)
             } else {
-                entries.insert(ClipEntry(text: trimmed, copiedAt: Date(), pinned: nil,
-                                         pinnedAt: nil, sourceBundle: bundle, sourceName: name), at: 0)
+                entries.insert(fresh, at: 0)
             }
         } else {
-            entries.insert(ClipEntry(text: trimmed, copiedAt: Date(), pinned: nil,
-                                     pinnedAt: nil, sourceBundle: bundle, sourceName: name), at: 0)
+            entries.insert(entry, at: 0)
         }
         normalize()
+    }
+
+    private func imageFromPasteboard(_ pb: NSPasteboard) -> NSImage? {
+        if let data = pb.data(forType: .png) { return NSImage(data: data) }
+        if let data = pb.data(forType: .tiff) { return NSImage(data: data) }
+        return nil
+    }
+
+    /// 图片落盘为 PNG(数据目录 images/ 下,逐文件 UUID 命名)
+    private func saveImagePNG(_ image: NSImage) -> String? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return nil }
+        let dir = DataDir.url.appendingPathComponent("images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("\(UUID().uuidString).png")
+        do {
+            try png.write(to: url)
+            return url.path
+        } catch { return nil }
+    }
+
+    /// 删除条目时顺带清理其图片文件(只删 images/ 下本应用生成的具体文件)
+    private func unlinkImage(_ entry: ClipEntry) {
+        guard let path = entry.imagePath else { return }
+        try? FileManager.default.removeItem(atPath: path)
     }
 
     /// 规范化:固定项(任意序)+ 未固定(新→旧),未固定超过 cap 裁剪
@@ -320,8 +357,13 @@ final class ClipboardStore: ObservableObject, JSONStore {
     }
 
     func copyBack(_ entry: ClipEntry) {
-        // Maccy: 选中项 → 回写系统剪贴板
+        // Maccy: 选中项 → 回写系统剪贴板(图片条目回写位图)
         NSPasteboard.general.clearContents()
+        if let path = entry.imagePath, let image = NSImage(contentsOfFile: path) {
+            NSPasteboard.general.writeObjects([image])
+            lastChangeCount = NSPasteboard.general.changeCount // 避免自记
+            return
+        }
         NSPasteboard.general.setString(entry.text, forType: .string)
         lastChangeCount = NSPasteboard.general.changeCount // 避免自记
     }
@@ -348,10 +390,12 @@ final class ClipboardStore: ObservableObject, JSONStore {
     // MARK: 清除(zh 文案证据:"清除未置顶的项目,按住⇧以全部清除")
 
     func clearUnpinned() {
+        entries.filter { !$0.isPinned }.forEach(unlinkImage)
         entries.removeAll { !$0.isPinned }
     }
 
     func clearAll() {
+        entries.forEach(unlinkImage)
         entries.removeAll()
     }
 
@@ -367,6 +411,9 @@ final class ClipboardStore: ObservableObject, JSONStore {
     }
 
     func remove(_ id: UUID) {
-        entries.removeAll { $0.id == id }
+        if let i = entries.firstIndex(where: { $0.id == id }) {
+            unlinkImage(entries[i])
+            entries.remove(at: i)
+        }
     }
 }
