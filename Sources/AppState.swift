@@ -252,6 +252,7 @@ final class AppState: ObservableObject {
 
     private let defaults = UserDefaults.standard
     private static let settingsKey = "settings"
+    private var uiCancellable: AnyCancellable?
 
     init() {
         DataDir.ensure()
@@ -267,6 +268,13 @@ final class AppState: ObservableObject {
             }
         }
         settings.syncEffectiveTheme()
+
+        // 关键:UIState(todoFilter/悬停态/输入草稿等瞬时态)的变化必须转发到
+        // AppState.objectWillChange——所有视图只观察 state,不转发的话
+        // 切分组不刷新、悬停删除按钮不出现、搜索不过滤(全部是同一根因)
+        uiCancellable = ui.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     /// 设置页选主题:同时落模式与生效值(跟随系统则立即按当前系统外观解析)
