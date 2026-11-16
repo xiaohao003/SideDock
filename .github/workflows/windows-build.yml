@@ -40,5 +40,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SideDock-windows-x64
-          path: SideDock-windows-x64.zip
+          path: windows/SideDock-windows-x64.zip
           retention-days: 30
