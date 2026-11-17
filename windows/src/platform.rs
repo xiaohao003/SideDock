@@ -392,12 +392,22 @@ pub fn system_is_dark() -> bool {
 
 #[cfg(windows)]
 pub fn fixup_panel_window(title: &str, dock_right: bool) {
+    style_window(title);
+    if dock_right {
+        dock_panel_right(title);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn fixup_panel_window(_title: &str, _dock_right: bool) {}
+
+/// 窗口修饰:去任务栏条 + 置顶(位置由调用方决定)
+#[cfg(windows)]
+pub fn style_window(title: &str) {
     use windows::core::PCWSTR;
-    use windows::Win32::Foundation::RECT;
     use windows::Win32::UI::WindowsAndMessaging::{
-        FindWindowW, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW,
-        SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SM_CXSCREEN, SM_CYSCREEN, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+        FindWindowW, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
     };
 
     let title16: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
@@ -418,31 +428,83 @@ pub fn fixup_panel_window(title: &str, dock_right: bool) {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
-        if dock_right {
-            let sw = GetSystemMetrics(SM_CXSCREEN);
-            let sh = GetSystemMetrics(SM_CYSCREEN);
-            let mut rect = RECT::default();
-            if GetWindowRect(hwnd, &mut rect).is_ok() {
-                let w = rect.right - rect.left;
-                let h = rect.bottom - rect.top;
-                let x = sw - w - 8;
-                let y = (sh - h) / 2;
-                let _ = SetWindowPos(
-                    hwnd,
-                    HWND_TOPMOST,
-                    x,
-                    y,
-                    w,
-                    h,
-                    SWP_NOACTIVATE,
-                );
-            }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn style_window(_title: &str) {}
+
+/// 停靠屏幕右缘、垂直居中
+#[cfg(windows)]
+pub fn dock_panel_right(title: &str) {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, GetSystemMetrics, GetWindowRect, SetWindowPos, HWND_TOPMOST, SM_CXSCREEN,
+        SM_CYSCREEN, SWP_NOACTIVATE,
+    };
+
+    let title16: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let Ok(hwnd) = FindWindowW(PCWSTR::null(), PCWSTR(title16.as_ptr())) else {
+            return;
+        };
+        let sw = GetSystemMetrics(SM_CXSCREEN);
+        let sh = GetSystemMetrics(SM_CYSCREEN);
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_ok() {
+            let w = rect.right - rect.left;
+            let h = rect.bottom - rect.top;
+            let x = sw - w - 8;
+            let y = (sh - h) / 2;
+            let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
         }
     }
 }
 
 #[cfg(not(windows))]
-pub fn fixup_panel_window(_title: &str, _dock_right: bool) {}
+pub fn dock_panel_right(_title: &str) {}
+
+/// 移动到指定物理像素位置(不改变大小)
+#[cfg(windows)]
+pub fn position_window(title: &str, x: i32, y: i32) {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE,
+    };
+
+    let title16: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let Ok(hwnd) = FindWindowW(PCWSTR::null(), PCWSTR(title16.as_ptr())) else {
+            return;
+        };
+        let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn position_window(_title: &str, _x: i32, _y: i32) {}
+
+/// 读取窗口左上角物理像素位置(拖动移动期间持久化用)
+#[cfg(windows)]
+pub fn window_position(title: &str) -> Option<(i32, i32)> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowRect};
+
+    let title16: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let hwnd = FindWindowW(PCWSTR::null(), PCWSTR(title16.as_ptr())).ok()?;
+        let mut rect = RECT::default();
+        GetWindowRect(hwnd, &mut rect).ok()?;
+        Some((rect.left, rect.top))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn window_position(_title: &str) -> Option<(i32, i32)> {
+    None
+}
 
 // MARK: - 中文字体(egui 默认字库无 CJK,优先微软雅黑)
 

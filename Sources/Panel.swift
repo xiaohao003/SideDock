@@ -25,8 +25,8 @@ final class SidebarPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
-        isMovable = false
-        isMovableByWindowBackground = false
+        isMovable = true
+        isMovableByWindowBackground = true   // 点击空白拖动移动窗口(控件/列表照常交互)
         hidesOnDeactivate = false
         hasShadow = false   // 圆角卡片自带投影
         isReleasedWhenClosed = false
@@ -44,14 +44,128 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
     var acceptsFileDrop: () -> Bool = { false }   // 仅暂存页接收
     var onFilesDropped: (([URL]) -> Void)?
     var onDropTargeted: ((Bool) -> Void)?
+    // 边缘/角缩放:命中 6pt 边带时由宿主接管鼠标(AppKit 沿 superview 链向上找
+    // 命中视图,宿主是 SwiftUI 内容的祖先,边带覆盖面板全部四边四角)
+    var isExpandedCheck: () -> Bool = { true }
+    var onGeometryChanged: ((NSRect) -> Void)?
+
+    static let band: CGFloat = 6
+
+    struct ResizeDirs: OptionSet {
+        let rawValue: UInt8
+        static let left = ResizeDirs(rawValue: 1 << 0)
+        static let right = ResizeDirs(rawValue: 1 << 1)
+        static let top = ResizeDirs(rawValue: 1 << 2)
+        static let bottom = ResizeDirs(rawValue: 1 << 3)
+    }
+    private var resizeDirs: ResizeDirs = []
+    private var resizeStart: (loc: NSPoint, frame: NSRect)?
 
     required init(rootView: PanelRootView) {
         super.init(rootView: rootView)
         registerForDraggedTypes([.fileURL])
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+            owner: self))
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // MARK: 边缘/角命中
+
+    /// p 为本视图坐标(自动适配 flipped)
+    private func resizeDirs(atPoint p: NSPoint) -> ResizeDirs {
+        let b = bounds
+        let dLeft = p.x - b.minX
+        let dRight = b.maxX - p.x
+        let dTop = isFlipped ? p.y - b.minY : b.maxY - p.y
+        let dBottom = isFlipped ? b.maxY - p.y : p.y - b.minY
+        let B = Self.band
+        var dirs: ResizeDirs = []
+        if dLeft >= 0, dLeft <= B { dirs.insert(.left) }
+        if dRight >= 0, dRight <= B { dirs.insert(.right) }
+        if dTop >= 0, dTop <= B { dirs.insert(.top) }
+        if dBottom >= 0, dBottom <= B { dirs.insert(.bottom) }
+        return dirs
+    }
+
+    private func dirsAtWindowLocation(_ loc: NSPoint) -> ResizeDirs {
+        resizeDirs(atPoint: convert(loc, from: nil))
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // 收起态(12×96 把手)不接管:把手按钮照常工作
+        guard isExpandedCheck() else { return super.hitTest(point) }
+        let p = superview.map { convert(point, from: $0) } ?? point
+        return resizeDirs(atPoint: p).isEmpty ? super.hitTest(point) : self
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        let dirs = dirsAtWindowLocation(event.locationInWindow)
+        // macOS 未公开对角缩放光标,四角用十字光标代替
+        let cursor: NSCursor?
+        switch (dirs.contains(.left), dirs.contains(.right), dirs.contains(.top), dirs.contains(.bottom)) {
+        case (true, false, true, false), (false, true, false, true),
+             (false, true, true, false), (true, false, false, true): cursor = NSCursor.crosshair
+        case (true, false, false, false), (false, true, false, false): cursor = NSCursor.resizeLeftRight
+        case (false, false, true, false), (false, false, false, true): cursor = NSCursor.resizeUpDown
+        default: cursor = nil
+        }
+        if let cursor { cursor.set() } else { super.cursorUpdate(with: event) }
+    }
+
+    // MARK: 缩放拖拽(窗口基础坐标,y 向上)
+
+    override func mouseDown(with event: NSEvent) {
+        let dirs = dirsAtWindowLocation(event.locationInWindow)
+        guard !dirs.isEmpty, let win = window else { return super.mouseDown(with: event) }
+        resizeDirs = dirs
+        resizeStart = (event.locationInWindow, win.frame)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = resizeStart, let win = window, !resizeDirs.isEmpty else {
+            return super.mouseDragged(with: event)
+        }
+        let dx = event.locationInWindow.x - start.loc.x
+        let dy = event.locationInWindow.y - start.loc.y
+        var f = start.frame
+        let clampedW = { Swift.min(Swift.max($0, SidebarController.minPanelWidth), SidebarController.maxPanelWidth) }
+        let clampedH = { Swift.min(Swift.max($0, SidebarController.minPanelHeight), SidebarController.maxPanelHeight) }
+        if resizeDirs.contains(.left) {
+            let w = clampedW(start.frame.width - dx)
+            f.origin.x = start.frame.maxX - w
+            f.size.width = w
+        }
+        if resizeDirs.contains(.right) {
+            f.size.width = clampedW(start.frame.width + dx)
+        }
+        if resizeDirs.contains(.top) {
+            f.size.height = clampedH(start.frame.height + dy)
+        }
+        if resizeDirs.contains(.bottom) {
+            let h = clampedH(start.frame.height - dy)
+            f.origin.y = start.frame.maxY - h
+            f.size.height = h
+        }
+        // 夹回可见区域,避免拖出屏幕够不着
+        let vis = SidebarController.visibleFrame()
+        f.origin.x = Swift.min(Swift.max(f.origin.x, vis.minX - f.width + 12), vis.maxX - 12)
+        f.origin.y = Swift.min(Swift.max(f.origin.y, vis.minY - f.height + 12), vis.maxY - 12)
+        win.setFrame(f, display: true, animate: false)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if !resizeDirs.isEmpty, let win = window {
+            onGeometryChanged?(win.frame)
+            resizeDirs = []
+            resizeStart = nil
+            return
+        }
+        super.mouseUp(with: event)
+    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let types = sender.draggingPasteboard.types?.map(\.rawValue) ?? []
@@ -138,7 +252,20 @@ final class SidebarController: ObservableObject {
             guard let self else { return }
             self.state.ui.shelfDropTargeted = targeted && self.state.settings.tab == .shelf
         }
+        hostingView.isExpandedCheck = { [weak self] in self?.isExpanded ?? false }
+        hostingView.onGeometryChanged = { [weak self] frame in self?.persistGeometry(frame) }
         panel.contentView = hostingView
+
+        // 拖动空白移动窗口(isMovableByWindowBackground)后持久化原点
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isExpanded else { return }
+            var s = self.state.settings
+            s.panelOriginX = Double(self.panel.frame.origin.x)
+            s.panelOriginY = Double(self.panel.frame.origin.y)
+            self.state.settings = s
+        }
 
         state.$settings
             .receive(on: RunLoop.main)
@@ -157,7 +284,7 @@ final class SidebarController: ObservableObject {
 
     // MARK: 几何(观测:把手中心决定一切,面板垂直居中于把手)
 
-    private static func visibleFrame() -> NSRect {
+    static func visibleFrame() -> NSRect {
         NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
     }
 
@@ -178,6 +305,12 @@ final class SidebarController: ObservableObject {
         let vis = visibleFrame()
         let w = min(max(settings.panelWidth, minPanelWidth), maxPanelWidth)
         let h = min(max(settings.panelHeight, minPanelHeight), maxPanelHeight)
+        // 用户拖动/缩放过(panelOriginX/Y) → 按存储原点自由定位;否则停靠右缘
+        if let x = settings.panelOriginX, let y = settings.panelOriginY {
+            let cx = min(max(x, vis.minX - w + 12), max(vis.minX, vis.maxX - 12))
+            let cy = min(max(y, vis.minY - h + 12), max(vis.minY, vis.maxY - 12))
+            return NSRect(x: cx, y: cy, width: w, height: h)
+        }
         let cy = clampedCenterY(settings.handleCenterY, height: h)
         return NSRect(x: vis.maxX - w, y: cy - h / 2, width: w, height: h)
     }
@@ -194,6 +327,17 @@ final class SidebarController: ObservableObject {
         guard appliedDark != dark else { return }
         appliedDark = dark
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    }
+
+    /// 缩放结束(宿主视图 mouseUp)后落盘尺寸与原点
+    private func persistGeometry(_ frame: NSRect) {
+        guard isExpanded else { return }
+        var s = state.settings
+        s.panelWidth = Double(frame.width)
+        s.panelHeight = Double(frame.height)
+        s.panelOriginX = Double(frame.origin.x)
+        s.panelOriginY = Double(frame.origin.y)
+        state.settings = s
     }
 
     // MARK: 展开 / 收起

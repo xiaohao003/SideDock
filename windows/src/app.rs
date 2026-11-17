@@ -7,7 +7,9 @@ use crate::stores::{ClipboardStore, VaultStore};
 use crate::theme::{colors, ThemeColors};
 use crate::todo::TodoStore;
 use crate::ui::{shell, views};
-use egui::{Color32, Context, CornerRadius, FontId, Pos2, Rect, ViewportCommand};
+use egui::{
+    Color32, Context, CornerRadius, FontId, Pos2, Rect, Vec2, ViewportCommand,
+};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -58,6 +60,8 @@ pub struct UIState {
     pub hide_requested: bool,
     pub paste_requested: bool,
     pub reset_requested: bool,
+    // 空白拖动移动窗口进行中(期间持续读取物理位置持久化)
+    pub moving_window: bool,
 }
 
 // MARK: - 应用状态
@@ -189,7 +193,18 @@ impl App {
         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
         #[cfg(windows)]
-        crate::platform::fixup_panel_window(WINDOW_TITLE, true);
+        self.restore_window_placement();
+    }
+
+    /// 恢复窗口位置:用户移动过(settings.pos)按存储位置,否则停靠右缘
+    #[cfg(windows)]
+    fn restore_window_placement(&self) {
+        if let Some((x, y)) = self.settings.pos {
+            crate::platform::position_window(WINDOW_TITLE, x as i32, y as i32);
+            crate::platform::style_window(WINDOW_TITLE);
+        } else {
+            crate::platform::fixup_panel_window(WINDOW_TITLE, true);
+        }
     }
 
     fn toggle_visible(&mut self, ctx: &Context) {
@@ -271,8 +286,9 @@ impl App {
         }
         if self.ui.reset_requested {
             self.ui.reset_requested = false;
+            self.settings.pos = None; // 恢复默认:回到停靠右缘
             #[cfg(windows)]
-            crate::platform::fixup_panel_window(WINDOW_TITLE, true);
+            self.restore_window_placement();
         }
         if self.ui.hide_requested {
             self.ui.hide_requested = false;
@@ -297,6 +313,47 @@ impl App {
                 // 整窗圆角背景(窗口透明,四角透出)
                 let outer = ui.max_rect().expand(10.0);
                 ui.painter().rect_filled(outer, CornerRadius::same(14), t.bg);
+
+                // ── 窗口框架交互:空白拖动移动窗口;边缘/角拖动调整大小
+                // (无边框窗口无系统修饰,走 egui StartDrag/StartResize 原生命令;
+                //  先分配整窗矩形,后画的控件会优先吃掉交互,所以只有空白可拖)
+                let frame_resp = ui.allocate_rect(outer, egui::Sense::click());
+                if frame_resp.drag_started() {
+                    self.ui.moving_window = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                const BAND: f32 = 6.0;
+                const CORNER: f32 = 14.0;
+                let r = outer;
+                let bands: [(egui::Rect, egui::ResizeDirection, egui::CursorIcon); 8] = [
+                    // 四角
+                    (egui::Rect::from_min_size(r.min, Vec2::splat(CORNER)),
+                     egui::ResizeDirection::NorthWest, egui::CursorIcon::ResizeNwSe),
+                    (egui::Rect::from_min_size(Pos2::new(r.right() - CORNER, r.top()), Vec2::splat(CORNER)),
+                     egui::ResizeDirection::NorthEast, egui::CursorIcon::ResizeNeSw),
+                    (egui::Rect::from_min_size(Pos2::new(r.left(), r.bottom() - CORNER), Vec2::splat(CORNER)),
+                     egui::ResizeDirection::SouthWest, egui::CursorIcon::ResizeNeSw),
+                    (egui::Rect::from_min_max(Pos2::new(r.right() - CORNER, r.bottom() - CORNER), r.max),
+                     egui::ResizeDirection::SouthEast, egui::CursorIcon::ResizeNwSe),
+                    // 四边(去角后的中段)
+                    (egui::Rect::from_min_max(Pos2::new(r.left() + CORNER, r.top()), Pos2::new(r.right() - CORNER, r.top() + BAND)),
+                     egui::ResizeDirection::North, egui::CursorIcon::ResizeVertical),
+                    (egui::Rect::from_min_max(Pos2::new(r.left() + CORNER, r.bottom() - BAND), Pos2::new(r.right() - CORNER, r.bottom())),
+                     egui::ResizeDirection::South, egui::CursorIcon::ResizeVertical),
+                    (egui::Rect::from_min_max(Pos2::new(r.left(), r.top() + CORNER), Pos2::new(r.left() + BAND, r.bottom() - CORNER)),
+                     egui::ResizeDirection::West, egui::CursorIcon::ResizeHorizontal),
+                    (egui::Rect::from_min_max(Pos2::new(r.right() - BAND, r.top() + CORNER), Pos2::new(r.right(), r.bottom() - CORNER)),
+                     egui::ResizeDirection::East, egui::CursorIcon::ResizeHorizontal),
+                ];
+                for (rect, dir, icon) in bands {
+                    let resp = ui.allocate_rect(rect, egui::Sense::click());
+                    if resp.hovered() {
+                        ctx.set_cursor_icon(icon);
+                    }
+                    if resp.drag_started() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+                    }
+                }
 
                 shell::header(ui, &t, &mut self.ui);
                 ui.add_space(8.0);
@@ -331,15 +388,25 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        // 首帧:窗口修饰(去任务栏条 + 贴右缘 + 置顶)
+        // 首帧:窗口修饰(去任务栏条 + 置顶;位置按存储或停靠右缘)
         if !self.win_fixed {
             self.win_fixed = true;
             #[cfg(windows)]
-            crate::platform::fixup_panel_window(WINDOW_TITLE, true);
+            self.restore_window_placement();
         }
 
         self.poll_platform(ctx);
         self.poll_timers(ctx);
+
+        // 空白拖动移动窗口:期间持续读取物理位置;松开即结束
+        if self.ui.moving_window {
+            let pressed = ctx.input(|i| i.pointer.primary_down());
+            if !pressed {
+                self.ui.moving_window = false;
+            } else if let Some((x, y)) = crate::platform::window_position(WINDOW_TITLE) {
+                self.settings.pos = Some((x as f32, y as f32));
+            }
+        }
 
         // 主题生效值 → egui visuals
         let dark = self.settings.theme_is_dark;
@@ -582,7 +649,8 @@ pub fn run() {
         viewport: egui::ViewportBuilder::default()
             .with_title(WINDOW_TITLE)
             .with_inner_size([PANEL_W, PANEL_H])
-            .with_resizable(false)
+            // StartResize(winit 拖边缩放)要求窗口可调整;无边框时无系统缩放边框,不受影响
+            .with_resizable(true)
             .with_always_on_top()
             .with_transparent(true)
             .with_decorations(false)

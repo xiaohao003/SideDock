@@ -69,6 +69,9 @@ pub struct Settings {
     pub launch_at_login: bool,
     pub hotkey: Option<HotkeySpec>,
     pub tab: PanelTab,
+    /// 自由定位(对应 macOS 版 panelOriginX/Y):拖空白移动/拖边缘缩放后记录
+    /// 物理像素坐标;None = 未动过,仍停靠屏幕右缘
+    pub pos: Option<(f32, f32)>,
 }
 
 impl Default for Settings {
@@ -81,6 +84,7 @@ impl Default for Settings {
             launch_at_login: false,
             hotkey: Some(HotkeySpec::default()),
             tab: PanelTab::Todo,
+            pos: None,
         }
     }
 }

@@ -130,6 +130,10 @@ struct Settings: Codable {
     var tab: PanelTab = .todo
     var shelfBarFrame: NSRect = NSRect(x: 200, y: 400, width: 260, height: 56)
     var autoPaste: Bool? = true       // Maccy 行为:选中历史项后自动粘贴到前台应用
+    // 自由定位(观测原版 defaults 有 panelOriginX/Y):拖动空白移动窗口、拖边缘/角
+    // 缩放后记录原点;nil = 未动过,展开时仍停靠屏幕右缘(与把手对齐)
+    var panelOriginX: Double? = nil
+    var panelOriginY: Double? = nil
 
     var autoPasteEnabled: Bool { autoPaste ?? true }
 
@@ -137,7 +141,7 @@ struct Settings: Codable {
     private enum CodingKeys: String, CodingKey {
         case panelWidth, panelHeight, handleCenterY, backgroundOpacity, themeIsDark, themeMode
         case autoExpand, pinned, clickOutsideKeepsOpen, shelfBarVisible, clipboardInMenuBar
-        case hotkey, tab, shelfBarFrame, autoPaste
+        case hotkey, tab, shelfBarFrame, autoPaste, panelOriginX, panelOriginY
     }
 
     init() {}
@@ -162,6 +166,8 @@ struct Settings: Codable {
         shelfBarFrame = try c.decodeIfPresent(NSRect.self, forKey: .shelfBarFrame)
             ?? NSRect(x: 200, y: 400, width: 260, height: 56)
         autoPaste = try c.decodeIfPresent(Bool.self, forKey: .autoPaste) ?? true
+        panelOriginX = try c.decodeIfPresent(Double.self, forKey: .panelOriginX)
+        panelOriginY = try c.decodeIfPresent(Double.self, forKey: .panelOriginY)
     }
 
     /// 系统当前是否深色外观
@@ -304,6 +310,7 @@ final class AppState: ObservableObject {
     func resetPanelGeometry() {
         var s = settings
         s.panelWidth = 472; s.panelHeight = 519
+        s.panelOriginX = nil; s.panelOriginY = nil   // 回到停靠右缘
         if let vis = NSScreen.main?.visibleFrame { s.handleCenterY = vis.midY + vis.height * 0.1 }
         settings = s
     }
