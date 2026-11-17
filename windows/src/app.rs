@@ -360,13 +360,15 @@ impl eframe::App for App {
             self.hide(ctx);
         }
 
-        // 暂存拖放落盘
+        // 暂存拖放落盘(egui dropped_files 已是全量列表;add_many 保持拖入顺序)
         if self.settings.tab == PanelTab::Shelf {
-            let dropped = ctx.input(|i| i.raw.dropped_files.clone());
-            for f in dropped {
-                if let Some(p) = f.path {
-                    self.shelf.add(p);
-                }
+            let dropped: Vec<std::path::PathBuf> = ctx
+                .input(|i| i.raw.dropped_files.clone())
+                .into_iter()
+                .filter_map(|f| f.path)
+                .collect();
+            if !dropped.is_empty() {
+                self.shelf.add_many(dropped);
             }
         }
 
