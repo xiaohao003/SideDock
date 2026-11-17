@@ -222,6 +222,14 @@ final class ShelfStore: ObservableObject, JSONStore {
         items.insert(ShelfItem(path: url.path), at: 0)
     }
 
+    /// 多文件批量暂存(保持拖入顺序,逐个去重)
+    func add(_ urls: [URL]) {
+        for url in urls.reversed() {
+            guard !items.contains(where: { $0.path == url.path }) else { continue }
+            items.insert(ShelfItem(path: url.path), at: 0)
+        }
+    }
+
     func remove(_ id: UUID) { items.removeAll { $0.id == id } }
 }
 

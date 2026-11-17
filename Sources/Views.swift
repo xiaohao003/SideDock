@@ -548,15 +548,8 @@ struct ShelfTab: View {
                         .strokeBorder(style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
                         .foregroundStyle(state.ui.shelfDropTargeted ? theme.accent : theme.border)
                 )
-                .onDrop(of: [.fileURL], isTargeted: state.uiBind(\.shelfDropTargeted)) { providers in
-                    for p in providers {
-                        _ = p.loadObject(ofClass: URL.self) { url, _ in
-                            guard let url else { return }
-                            DispatchQueue.main.async { store.add(url) }
-                        }
-                    }
-                    return true
-                }
+                // 拖放已上移到面板宿主视图(SideDockHostingView):多文件可靠、
+                // 非空状态也可继续拖入,这里不再挂 onDrop
             } else {
                 // 渲染证据:360pt 面板下文件网格为 3 列
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8),

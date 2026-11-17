@@ -36,6 +36,58 @@ final class SidebarPanel: NSPanel {
     }
 }
 
+// MARK: - 面板宿主视图(原生文件拖放)
+
+/// 拖放目的地挂在宿主视图层(AppKit 沿 superview 链向上找注册视图,宿主是
+/// 所有 SwiftUI 内容的祖先);直读拖拽剪贴板,多文件一次全收。
+final class SideDockHostingView: NSHostingView<PanelRootView> {
+    var acceptsFileDrop: () -> Bool = { false }   // 仅暂存页接收
+    var onFilesDropped: (([URL]) -> Void)?
+    var onDropTargeted: ((Bool) -> Void)?
+
+    override init(rootView: PanelRootView) {
+        super.init(rootView: rootView)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard acceptsFileDrop(), hasFileURL(sender) else { return [] }
+        onDropTargeted?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard acceptsFileDrop(), hasFileURL(sender) else { return [] }
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDropTargeted?(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onDropTargeted?(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDropTargeted?(false)
+        guard acceptsFileDrop() else { return false }
+        let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        guard !urls.isEmpty else { return false }
+        onFilesDropped?(urls)
+        return true
+    }
+
+    private func hasFileURL(_ sender: NSDraggingInfo) -> Bool {
+        sender.draggingPasteboard.types?.contains(.fileURL) ?? false
+    }
+}
+
 // MARK: - 控制器
 
 final class SidebarController: ObservableObject {
@@ -57,9 +109,19 @@ final class SidebarController: ObservableObject {
     init(state: AppState) {
         self.state = state
         panel = SidebarPanel(contentRect: Self.collapsedFrame(settings: state.settings))
-        let hosting = NSHostingController(rootView: PanelRootView(state: state, controller: self))
-        hosting.sizingOptions = []
-        panel.contentViewController = hosting
+        // 用自定义宿主视图(而非 NSHostingController)以便在祖先层注册原生文件拖放:
+        // AppKit 拖放目的地查找是"命中视图 → 沿 superview 链向上找注册视图",
+        // 挂在宿主层才能覆盖暂存页任意位置(含已有文件的网格),且直读拖拽
+        // 剪贴板可一次拿到全部文件 URL(SwiftUI onDrop/NSItemProvider 在 macOS
+        // 多文件时只回调首个 provider,旧实现还只挂在空状态上)
+        let hostingView = SideDockHostingView(rootView: PanelRootView(state: state, controller: self))
+        hostingView.acceptsFileDrop = { [weak self] in self?.state.settings.tab == .shelf }
+        hostingView.onFilesDropped = { [weak self] urls in self?.state.shelf.add(urls) }
+        hostingView.onDropTargeted = { [weak self] targeted in
+            guard let self else { return }
+            self.state.ui.shelfDropTargeted = targeted && self.state.settings.tab == .shelf
+        }
+        panel.contentView = hostingView
 
         state.$settings
             .receive(on: RunLoop.main)
