@@ -1,0 +1,46 @@
+name: macOS Build
+
+on:
+  push:
+    branches: [main]
+    paths: ["Sources/**", "build.sh", "tests/**", ".github/workflows/release-macos.yml"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # 打 tag 时创建 Release 并挂资产
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: ./build.sh
+
+      - name: Run tests
+        run: |
+          swiftc Sources/AppState.swift Sources/Stores.swift Sources/Downloads.swift \
+            Sources/PasteHelper.swift Sources/MusicController.swift Sources/ShelfBarController.swift \
+            Sources/Panel.swift Sources/Views.swift tests/main.swift -o /tmp/todo-test
+          mkdir -p /tmp/td
+          SIDEDOCK_PROMOSHOT=1 SIDEDOCK_DATA_DIR=/tmp/td /tmp/todo-test
+
+      - name: Zip app
+        run: |
+          cd build
+          ditto -c -k --sequesterRsrc --keepParent SideDock.app SideDock-macos-arm64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SideDock-macos-arm64
+          path: build/SideDock-macos-arm64.zip
+          retention-days: 30
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/SideDock-macos-arm64.zip
