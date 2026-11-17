@@ -45,7 +45,7 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
     var onFilesDropped: (([URL]) -> Void)?
     var onDropTargeted: ((Bool) -> Void)?
 
-    override init(rootView: PanelRootView) {
+    required init(rootView: PanelRootView) {
         super.init(rootView: rootView)
         registerForDraggedTypes([.fileURL])
     }
@@ -54,7 +54,10 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard acceptsFileDrop(), hasFileURL(sender) else { return [] }
+        let types = sender.draggingPasteboard.types?.map(\.rawValue) ?? []
+        let ok = acceptsFileDrop() && hasFileURL(sender)
+        NSLog("[drop] entered types=[%@] accepts=%@", types.joined(separator: ","), ok ? "Y" : "N")
+        guard ok else { return [] }
         onDropTargeted?(true)
         return .copy
     }
@@ -75,9 +78,23 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         onDropTargeted?(false)
         guard acceptsFileDrop() else { return false }
-        let urls = sender.draggingPasteboard.readObjects(
+        let pb = sender.draggingPasteboard
+        let types = pb.types?.map(\.rawValue) ?? []
+        let items = pb.pasteboardItems?.count ?? 0
+        var urls = pb.readObjects(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        // 兜底:Finder 多文件一定写 NSFilenamesPboardType(Apple 文件列表,一次全量);
+        // NSURL 读取在某些拖拽源上会少读,以文件列表为准
+        let fileList = pb.propertyList(forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
+            as? [String] ?? []
+        if urls.count < fileList.count {
+            urls = fileList.map { URL(fileURLWithPath: $0) }
+        }
+        NSLog("[drop] perform types=[%@] items=%d filelist=%d nsurls=%d final=%d",
+              types.joined(separator: ","), items, fileList.count, urls.count,
+              urls.count)
+        for u in urls { NSLog("[drop]   -> %@", u.path) }
         guard !urls.isEmpty else { return false }
         onFilesDropped?(urls)
         return true
