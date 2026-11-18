@@ -1088,6 +1088,7 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
     // 开关值在 ScrollArea 闭包内修改,声明提到外面(闭包结束后统一落盘)
     let mut pinned = app.settings.pinned;
     let mut auto_paste = app.settings.auto_paste;
+    let mut show_music = app.settings.show_music;
     let mut launch = app.settings.launch_at_login;
 
     ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -1131,10 +1132,11 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
         ui.add_space(8.0);
 
         // ── 行为开关
-        let card = card_rect(ui, t, 102.0);
+        let card = card_rect(ui, t, 134.0);
         for (i, (label, val)) in [
             ("常驻模式(失焦不收起)", &mut pinned),
             ("选中剪贴板后自动粘贴", &mut auto_paste),
+            ("显示底部\"正在播放\"卡片", &mut show_music),
             ("开机自启", &mut launch),
         ]
         .into_iter()
@@ -1223,6 +1225,9 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
     }
     if auto_paste != app.settings.auto_paste {
         app.settings.auto_paste = auto_paste;
+    }
+    if show_music != app.settings.show_music {
+        app.settings.show_music = show_music;
     }
     if launch != app.settings.launch_at_login {
         if crate::platform::set_launch_at_login(launch) {

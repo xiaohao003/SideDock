@@ -72,11 +72,24 @@ impl TodoStore {
     }
 
     /// 条目属于哪个分组:1 今日(含无日期) 2 明日 3 一周(其余未完成:未来一周/逾期)
-    /// 4 历史(已完成)。保证任何未完成条目必然落在 1..=3 之一,不会"加了看不见"。
+    /// 4 历史(已完成)。完成当天仍留在原分组(划线显示,可一键恢复),
+    /// 次日才归档到历史(与 macOS 版同一规则)。
     pub fn bucket_of(&self, item: &TodoItem, today: chrono::NaiveDate) -> u8 {
         if item.done {
+            let done_today = item
+                .done_at
+                .map(|d| d.date_naive() == today)
+                .unwrap_or(false);
+            if done_today {
+                return Self::due_bucket(item, today);
+            }
             return 4;
         }
+        Self::due_bucket(item, today)
+    }
+
+    /// 按到期时间分组(未完成/当天已完成共用)
+    fn due_bucket(item: &TodoItem, today: chrono::NaiveDate) -> u8 {
         let Some(due) = item.due else { return 1 };
         let d = due.date_naive();
         if d == today {
@@ -169,14 +182,25 @@ mod tests {
         let legacy = TodoItem::new("旧算法一周任务".into(), Some(now + Duration::hours(7 * 24)));
         assert!(store.matches(&legacy, 3, today), "旧算法生成的 7 天后任务在\"一周\"视图可见");
 
-        // 完成流转
+        // 完成流转:当天完成留在原分组,次日归档历史
         let first = store.items[0].id;
         store.toggle(first);
-        assert_eq!(store.count_for(4, today), 1, "完成后进入历史");
+        assert_eq!(store.count_for(1, today), 2, "当天完成的今日任务仍留在\"今日\"分组(计数不变)");
+        assert_eq!(store.count_for(4, today), 0, "当天完成不立即进历史");
         let after: usize = (1..=3).map(|f| store.count_for(f, today)).sum();
-        assert_eq!(after, unfinished - 1, "完成移出未完成分组");
+        assert_eq!(after, unfinished, "完成未归档仍计入分组计数");
         store.toggle(first);
-        assert_eq!(store.count_for(4, today), 0, "取消完成移出历史");
+        assert_eq!(store.count_for(1, today), 2, "取消完成恢复正常");
+        // 昨天完成的 → 历史
+        let mut old_done = store.items[0].clone();
+        old_done.done = true;
+        old_done.done_at = Some(now - Duration::days(1));
+        assert_eq!(store.bucket_of(&old_done, today), 4, "昨日完成的任务进入历史");
+        // done_at 缺失的旧数据 → 保守按历史
+        let mut legacy_done = store.items[1].clone();
+        legacy_done.done = true;
+        legacy_done.done_at = None;
+        assert_eq!(store.bucket_of(&legacy_done, today), 4, "无完成时间的已完成条目按历史处理");
 
         // 删除(不落盘:测试里直接操作 items 避免 SIDEDOCK_DATA_DIR 副作用)
         let removed = store.items[1].clone();

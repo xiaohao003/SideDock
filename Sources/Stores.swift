@@ -148,8 +148,19 @@ final class TodoStore: ObservableObject, JSONStore {
 
     /// 条目属于哪个分组:1 今日(含无日期) 2 明日 3 一周(其余未完成:未来一周/逾期)
     /// 4 历史(已完成)。保证任何未完成条目必然落在 1..3 之一,不会"加了看不见"。
+    /// 完成当天仍留在原分组(划线显示,可一键恢复),次日才归档到历史。
     func bucket(of item: TodoItem, calendar: Calendar = .current) -> Int {
-        if item.done { return 4 }
+        if item.done {
+            if let doneAt = item.doneAt, calendar.isDateInToday(doneAt) {
+                return dueBucket(of: item, calendar: calendar)
+            }
+            return 4
+        }
+        return dueBucket(of: item, calendar: calendar)
+    }
+
+    /// 按到期时间分组(未完成/当天已完成共用)
+    private func dueBucket(of item: TodoItem, calendar: Calendar) -> Int {
         guard let due = item.due else { return 1 }
         if calendar.isDateInToday(due) { return 1 }
         if calendar.isDateInTomorrow(due) { return 2 }

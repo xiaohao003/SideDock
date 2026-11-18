@@ -998,6 +998,9 @@ struct SettingsView: View {
                 }
                 Text("跟随系统:随 macOS 浅色/深色外观自动切换;面板、设置窗口与菜单栏剪贴板同步生效")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("显示底部\"正在播放\"卡片", isOn: state.ui.settingsBinding(\.musicCardVisible))
+                Text("关闭后面板内容区占满")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("侧边栏") {

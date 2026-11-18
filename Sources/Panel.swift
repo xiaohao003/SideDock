@@ -435,7 +435,9 @@ struct PanelBody: View {
             PanelContent(state: state)
                 .frame(maxWidth: .infinity)
                 .frame(maxHeight: .infinity)
-            MusicCard(state: state)
+            if state.settings.musicCardVisible {
+                MusicCard(state: state)
+            }
         }
         .padding(14)
         .padding(.trailing, 5)   // 与右缘把手留出间距

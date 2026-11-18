@@ -122,6 +122,7 @@ struct Settings: Codable {
     var themeIsDark: Bool = false     // 当前生效主题(由 themeMode 解析;视图统一读这里)
     var themeMode: ThemeMode = .system  // 默认跟随系统
     var clipboardInMenuBar: Bool = true // 菜单栏剪贴板独立入口
+    var musicCardVisible: Bool = true   // 底部正在播放卡片开关
     var autoExpand: Bool = true       // 悬停自动展开
     var pinned: Bool = true           // 观测默认 pinned=1
     var clickOutsideKeepsOpen: Bool = false
@@ -140,7 +141,7 @@ struct Settings: Codable {
     // 自定义解码:缺字段回退默认值,避免新增设置项导致旧配置整体重置
     private enum CodingKeys: String, CodingKey {
         case panelWidth, panelHeight, handleCenterY, backgroundOpacity, themeIsDark, themeMode
-        case autoExpand, pinned, clickOutsideKeepsOpen, shelfBarVisible, clipboardInMenuBar
+        case autoExpand, pinned, clickOutsideKeepsOpen, shelfBarVisible, clipboardInMenuBar, musicCardVisible
         case hotkey, tab, shelfBarFrame, autoPaste, panelOriginX, panelOriginY
     }
 
@@ -161,6 +162,7 @@ struct Settings: Codable {
         clickOutsideKeepsOpen = try c.decodeIfPresent(Bool.self, forKey: .clickOutsideKeepsOpen) ?? false
         shelfBarVisible = try c.decodeIfPresent(Bool.self, forKey: .shelfBarVisible) ?? false
         clipboardInMenuBar = try c.decodeIfPresent(Bool.self, forKey: .clipboardInMenuBar) ?? true
+        musicCardVisible = try c.decodeIfPresent(Bool.self, forKey: .musicCardVisible) ?? true
         hotkey = try c.decodeIfPresent(Hotkey.self, forKey: .hotkey)
         tab = try c.decodeIfPresent(PanelTab.self, forKey: .tab) ?? .todo
         shelfBarFrame = try c.decodeIfPresent(NSRect.self, forKey: .shelfBarFrame)

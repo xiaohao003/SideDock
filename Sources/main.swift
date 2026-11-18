@@ -149,6 +149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("panel-clipboard-light.png",  .clipboard, false),
         ]
         let savedSettings = state.settings
+        // 渲染对照原版 promoshot:音乐卡强制显示(与用户设置无关)
+        state.settings.musicCardVisible = true
         // 演示数据对齐原版 promoshot(仅渲染用;JSON 落在隔离的 SIDEDOCK_DATA_DIR,
         // 密码只注入内存条目、不写钥匙串)
         if state.todos.items.isEmpty {

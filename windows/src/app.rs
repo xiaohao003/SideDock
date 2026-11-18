@@ -362,7 +362,7 @@ impl App {
                 shell::tab_bar(ui, self, &t, counts);
                 ui.add_space(8.0);
 
-                let has_music = self.music.snapshot().is_some();
+                let has_music = self.settings.show_music && self.music.snapshot().is_some();
                 let card_h = if has_music { 152.0 } else { 0.0 };
                 let inner = ui.max_rect();
                 let body_top = ui.cursor().top();
