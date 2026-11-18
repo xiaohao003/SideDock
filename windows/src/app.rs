@@ -194,18 +194,28 @@ impl App {
     fn show(&self, ctx: &Context) {
         ctx.send_viewport_cmd(ViewportCommand::Visible(true));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
-        #[cfg(windows)]
-        self.restore_window_placement();
+        self.restore_window_placement(ctx);
     }
 
-    /// 恢复窗口位置:用户移动过(settings.pos)按存储位置,否则停靠右缘
-    #[cfg(windows)]
-    fn restore_window_placement(&self) {
+    /// 恢复窗口位置(egui 点坐标,DPI/远程桌面无关):
+    /// 用户移动过(settings.pos)按存储位置,否则停靠所在屏右缘垂直居中。
+    /// 之前用 Win32 物理坐标 SetWindowPos,RDP(DPI/多屏)下算错位置,
+    /// 窗口整体偏出屏幕只剩一条可见(实机复现)。
+    fn restore_window_placement(&self, ctx: &Context) {
+        #[cfg(windows)]
+        crate::platform::style_window(WINDOW_TITLE); // 去任务栏 + 置顶(仅样式)
+        let (monitor, win) = ctx.input(|i| (i.viewport().monitor_size, i.viewport().inner_rect));
+        let Some(win) = win else { return };
+        let (sw, sh) = match monitor {
+            Some(m) => (m.x, m.y),
+            None => (win.width() * 2.0, win.height() * 2.0),
+        };
         if let Some((x, y)) = self.settings.pos {
-            crate::platform::position_window(WINDOW_TITLE, x as i32, y as i32);
-            crate::platform::style_window(WINDOW_TITLE);
+            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
         } else {
-            crate::platform::fixup_panel_window(WINDOW_TITLE, true);
+            let x = sw - win.width() - 8.0;
+            let y = (sh - win.height()) / 2.0;
+            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
         }
     }
 
@@ -289,8 +299,7 @@ impl App {
         if self.ui.reset_requested {
             self.ui.reset_requested = false;
             self.settings.pos = None; // 恢复默认:回到停靠右缘
-            #[cfg(windows)]
-            self.restore_window_placement();
+            self.restore_window_placement(ctx);
         }
         if self.ui.hide_requested {
             self.ui.hide_requested = false;
@@ -407,9 +416,8 @@ impl eframe::App for App {
         // 首帧:窗口修饰(去任务栏条 + 置顶;位置按存储或停靠右缘)
         if !self.win_fixed {
             self.win_fixed = true;
-            log("first frame: window fixup");
-            #[cfg(windows)]
-            self.restore_window_placement();
+            log("first frame: window fixup (egui coords)");
+            self.restore_window_placement(ctx);
         }
 
         self.poll_platform(ctx);
@@ -421,8 +429,8 @@ impl eframe::App for App {
             let pressed = ctx.input(|i| i.pointer.primary_down());
             if !pressed {
                 self.ui.moving_window = false;
-                if let Some((x, y)) = crate::platform::window_position(WINDOW_TITLE) {
-                    self.settings.pos = Some((x as f32, y as f32));
+                if let Some(r) = ctx.input(|i| i.viewport().outer_rect) {
+                    self.settings.pos = Some((r.left(), r.top()));
                 }
             }
         }
