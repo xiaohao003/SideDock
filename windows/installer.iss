@@ -29,7 +29,8 @@ PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 中文向导文件由 CI 从官方仓库下载到 installer/ 目录(Inno 6.x 默认不带)
+Name: "chinesesimplified"; MessagesFile: "installer\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
