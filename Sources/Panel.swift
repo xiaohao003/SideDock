@@ -18,8 +18,10 @@ final class SidebarPanel: NSPanel {
 
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,
-                   styleMask: [.borderless, .nonactivatingPanel],
+                   styleMask: [.borderless, .nonactivatingPanel, .resizable],
                    backing: .buffered, defer: false)
+        // 无边框 + .resizable = 系统原生四边四角缩放热区(标准双箭头光标),
+        // 与 Electron frame:false 窗口同款机制;自定义边带已移除
         isFloatingPanel = true
         level = .floating   // 观测:layer=3
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
@@ -33,6 +35,9 @@ final class SidebarPanel: NSPanel {
         standardWindowButton(.closeButton)?.isHidden = true
         standardWindowButton(.miniaturizeButton)?.isHidden = true
         standardWindowButton(.zoomButton)?.isHidden = true
+        // 卡片最小 360×360 / 最大 720×1024;frame = 卡片 + 横 31(14+17) / 竖 28(14+14) padding
+        minSize = NSSize(width: 360 + 31, height: 360 + 28)
+        maxSize = NSSize(width: 720 + 31, height: 1024 + 28)
     }
 }
 
@@ -40,139 +45,19 @@ final class SidebarPanel: NSPanel {
 
 /// 拖放目的地挂在宿主视图层(AppKit 沿 superview 链向上找注册视图,宿主是
 /// 所有 SwiftUI 内容的祖先);直读拖拽剪贴板,多文件一次全收。
+/// (边缘/角缩放由系统原生热区处理:窗口 styleMask 含 .resizable,见 SidebarPanel)
 final class SideDockHostingView: NSHostingView<PanelRootView> {
     var acceptsFileDrop: () -> Bool = { false }   // 仅暂存页接收
     var onFilesDropped: (([URL]) -> Void)?
     var onDropTargeted: ((Bool) -> Void)?
-    // 边缘/角缩放:命中 6pt 边带时由宿主接管鼠标(AppKit 沿 superview 链向上找
-    // 命中视图,宿主是 SwiftUI 内容的祖先,边带覆盖面板全部四边四角)
-    var isExpandedCheck: () -> Bool = { true }
-    var onGeometryChanged: ((NSRect) -> Void)?
-    var onInteraction: ((Bool) -> Void)?   // 缩放进行中(挂起悬停自动收起)
-
-    static let band: CGFloat = 6
-
-    struct ResizeDirs: OptionSet {
-        let rawValue: UInt8
-        static let left = ResizeDirs(rawValue: 1 << 0)
-        static let right = ResizeDirs(rawValue: 1 << 1)
-        static let top = ResizeDirs(rawValue: 1 << 2)
-        static let bottom = ResizeDirs(rawValue: 1 << 3)
-    }
-    private var resizeDirs: ResizeDirs = []
-    private var resizeStart: (loc: NSPoint, frame: NSRect)?
 
     required init(rootView: PanelRootView) {
         super.init(rootView: rootView)
         registerForDraggedTypes([.fileURL])
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
-            owner: self))
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    // MARK: 边缘/角命中
-
-    /// 面板卡片可见矩形(本视图坐标)。窗口 frame 与卡片不重合:卡片四周有
-    /// 14pt 内边距,右侧另有 12pt 把手列 + 5pt 间距 —— 缩放边带必须贴卡片
-    /// 的边和角,否则右侧两角落在把手上、左侧两角落在透明 padding,全点不中。
-    var cardFrame: (() -> CGRect)? = nil
-
-    private func resizeDirs(atPoint p: NSPoint) -> ResizeDirs {
-        guard let card = cardFrame?() ?? nil else { return [] }
-        let dLeft = p.x - card.minX
-        let dRight = card.maxX - p.x
-        let dTop = isFlipped ? p.y - card.minY : card.maxY - p.y
-        let dBottom = isFlipped ? card.maxY - p.y : p.y - card.minY
-        let B = Self.band
-        var dirs: ResizeDirs = []
-        if dLeft >= 0, dLeft <= B { dirs.insert(.left) }
-        if dRight >= 0, dRight <= B { dirs.insert(.right) }
-        if dTop >= 0, dTop <= B { dirs.insert(.top) }
-        if dBottom >= 0, dBottom <= B { dirs.insert(.bottom) }
-        return dirs
-    }
-
-    private func dirsAtWindowLocation(_ loc: NSPoint) -> ResizeDirs {
-        resizeDirs(atPoint: convert(loc, from: nil))
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        // 收起态(12×96 把手)不接管:把手按钮照常工作
-        guard isExpandedCheck() else { return super.hitTest(point) }
-        let p = superview.map { convert(point, from: $0) } ?? point
-        return resizeDirs(atPoint: p).isEmpty ? super.hitTest(point) : self
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        let dirs = dirsAtWindowLocation(event.locationInWindow)
-        // macOS 未公开对角缩放光标,四角用十字光标代替
-        let cursor: NSCursor?
-        switch (dirs.contains(.left), dirs.contains(.right), dirs.contains(.top), dirs.contains(.bottom)) {
-        case (true, false, true, false), (false, true, false, true),
-             (false, true, true, false), (true, false, false, true): cursor = NSCursor.crosshair
-        case (true, false, false, false), (false, true, false, false): cursor = NSCursor.resizeLeftRight
-        case (false, false, true, false), (false, false, false, true): cursor = NSCursor.resizeUpDown
-        default: cursor = nil
-        }
-        if let cursor { cursor.set() } else { super.cursorUpdate(with: event) }
-    }
-
-    // MARK: 缩放拖拽(窗口基础坐标,y 向上)
-
-    override func mouseDown(with event: NSEvent) {
-        let dirs = dirsAtWindowLocation(event.locationInWindow)
-        guard !dirs.isEmpty, let win = window else { return super.mouseDown(with: event) }
-        resizeDirs = dirs
-        resizeStart = (event.locationInWindow, win.frame)
-        onInteraction?(true)
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let start = resizeStart, let win = window, !resizeDirs.isEmpty else {
-            return super.mouseDragged(with: event)
-        }
-        let dx = event.locationInWindow.x - start.loc.x
-        let dy = event.locationInWindow.y - start.loc.y
-        var f = start.frame
-        let clampedW = { Swift.min(Swift.max($0, SidebarController.minPanelWidth), SidebarController.maxPanelWidth) }
-        let clampedH = { Swift.min(Swift.max($0, SidebarController.minPanelHeight), SidebarController.maxPanelHeight) }
-        if resizeDirs.contains(.left) {
-            let w = clampedW(start.frame.width - dx)
-            f.origin.x = start.frame.maxX - w
-            f.size.width = w
-        }
-        if resizeDirs.contains(.right) {
-            f.size.width = clampedW(start.frame.width + dx)
-        }
-        if resizeDirs.contains(.top) {
-            f.size.height = clampedH(start.frame.height + dy)
-        }
-        if resizeDirs.contains(.bottom) {
-            let h = clampedH(start.frame.height - dy)
-            f.origin.y = start.frame.maxY - h
-            f.size.height = h
-        }
-        // 夹回可见区域,避免拖出屏幕够不着
-        let vis = SidebarController.visibleFrame()
-        f.origin.x = Swift.min(Swift.max(f.origin.x, vis.minX - f.width + 12), vis.maxX - 12)
-        f.origin.y = Swift.min(Swift.max(f.origin.y, vis.minY - f.height + 12), vis.maxY - 12)
-        win.setFrame(f, display: true, animate: false)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        if !resizeDirs.isEmpty, let win = window {
-            onGeometryChanged?(win.frame)
-            resizeDirs = []
-            resizeStart = nil
-            onInteraction?(false)
-            return
-        }
-        super.mouseUp(with: event)
-    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let types = sender.draggingPasteboard.types?.map(\.rawValue) ?? []
@@ -259,19 +144,9 @@ final class SidebarController: ObservableObject {
             guard let self else { return }
             self.state.ui.shelfDropTargeted = targeted && self.state.settings.tab == .shelf
         }
-        hostingView.isExpandedCheck = { [weak self] in self?.isExpanded ?? false }
-        hostingView.onGeometryChanged = { [weak self] frame in self?.persistGeometry(frame) }
-        hostingView.onInteraction = { [weak self] on in self?.setInteracting(on) }
-        // 卡片可见矩形:左/上/下 14pt 内边距 + 右侧 12pt 把手列 + 5pt 间距(与 PanelBody 布局一致)
-        hostingView.cardFrame = { [weak hostingView] in
-            guard let v = hostingView, !v.bounds.isEmpty else { return .zero }
-            let b = v.bounds
-            return NSRect(x: b.minX + 14, y: b.minY + 14,
-                          width: b.width - 14 - 17, height: b.height - 28)
-        }
         panel.contentView = hostingView
 
-        // 拖动空白移动窗口(isMovableByWindowBackground)后持久化原点
+        // 拖动空白/头部移动窗口(isMovableByWindowBackground + 头部手势)后持久化原点
         NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification, object: panel, queue: .main
         ) { [weak self] _ in
@@ -280,6 +155,18 @@ final class SidebarController: ObservableObject {
             s.panelOriginX = Double(self.panel.frame.origin.x)
             s.panelOriginY = Double(self.panel.frame.origin.y)
             self.state.settings = s
+        }
+        // 系统原生边缘缩放(borderless + .resizable):期间挂起悬停自动收起,
+        // 结束后把 frame 尺寸与原点一并落盘(拖上/左边缘会同时改变原点)
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willStartLiveResizeNotification, object: panel, queue: .main
+        ) { [weak self] _ in self?.setInteracting(true) }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didEndLiveResizeNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.setInteracting(false)
+            if self.isExpanded { self.persistGeometry(self.panel.frame) }
         }
 
         state.$settings
@@ -318,8 +205,9 @@ final class SidebarController: ObservableObject {
 
     static func expandedFrame(settings: Settings) -> NSRect {
         let vis = visibleFrame()
-        let w = min(max(settings.panelWidth, minPanelWidth), maxPanelWidth)
-        let h = min(max(settings.panelHeight, minPanelHeight), maxPanelHeight)
+        // frame = 卡片 + 横 31 / 竖 28 padding(与 SidebarPanel min/maxSize 同口径)
+        let w = min(max(settings.panelWidth, minPanelWidth + 31), maxPanelWidth + 31)
+        let h = min(max(settings.panelHeight, minPanelHeight + 28), maxPanelHeight + 28)
         // 用户拖动/缩放过(panelOriginX/Y) → 按存储原点自由定位;否则停靠右缘
         if let x = settings.panelOriginX, let y = settings.panelOriginY {
             let cx = min(max(x, vis.minX - w + 12), max(vis.minX, vis.maxX - 12))
@@ -361,6 +249,7 @@ final class SidebarController: ObservableObject {
         guard !isExpanded else { return }
         isExpanded = true
         cancelHoverTimer()
+        panel.styleMask.insert(.resizable)   // 展开态才允许边缘缩放
         applyGeometry(animated: true)
     }
 
@@ -368,6 +257,7 @@ final class SidebarController: ObservableObject {
         guard isExpanded else { return }
         isExpanded = false
         cancelExitCollapse()
+        panel.styleMask.remove(.resizable)   // 收起态(12×96 把手)不可缩放
         applyGeometry(animated: true)
     }
 
