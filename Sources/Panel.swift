@@ -76,13 +76,17 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
 
     // MARK: 边缘/角命中
 
-    /// p 为本视图坐标(自动适配 flipped)
+    /// 面板卡片可见矩形(本视图坐标)。窗口 frame 与卡片不重合:卡片四周有
+    /// 14pt 内边距,右侧另有 12pt 把手列 + 5pt 间距 —— 缩放边带必须贴卡片
+    /// 的边和角,否则右侧两角落在把手上、左侧两角落在透明 padding,全点不中。
+    var cardFrame: (() -> CGRect)? = nil
+
     private func resizeDirs(atPoint p: NSPoint) -> ResizeDirs {
-        let b = bounds
-        let dLeft = p.x - b.minX
-        let dRight = b.maxX - p.x
-        let dTop = isFlipped ? p.y - b.minY : b.maxY - p.y
-        let dBottom = isFlipped ? b.maxY - p.y : p.y - b.minY
+        guard let card = cardFrame?() ?? nil else { return [] }
+        let dLeft = p.x - card.minX
+        let dRight = card.maxX - p.x
+        let dTop = isFlipped ? p.y - card.minY : card.maxY - p.y
+        let dBottom = isFlipped ? card.maxY - p.y : p.y - card.minY
         let B = Self.band
         var dirs: ResizeDirs = []
         if dLeft >= 0, dLeft <= B { dirs.insert(.left) }
@@ -258,6 +262,13 @@ final class SidebarController: ObservableObject {
         hostingView.isExpandedCheck = { [weak self] in self?.isExpanded ?? false }
         hostingView.onGeometryChanged = { [weak self] frame in self?.persistGeometry(frame) }
         hostingView.onInteraction = { [weak self] on in self?.setInteracting(on) }
+        // 卡片可见矩形:左/上/下 14pt 内边距 + 右侧 12pt 把手列 + 5pt 间距(与 PanelBody 布局一致)
+        hostingView.cardFrame = { [weak hostingView] in
+            guard let v = hostingView, !v.bounds.isEmpty else { return .zero }
+            let b = v.bounds
+            return NSRect(x: b.minX + 14, y: b.minY + 14,
+                          width: b.width - 14 - 17, height: b.height - 28)
+        }
         panel.contentView = hostingView
 
         // 拖动空白移动窗口(isMovableByWindowBackground)后持久化原点
