@@ -134,21 +134,24 @@ final class TodoStore: ObservableObject, JSONStore {
 
     // MARK: - 分组判定(单一事实源:计数、过滤、新增跳转共用同一套规则)
 
-    /// 到期预设 → 具体时间(今日=今天 18:00 / 明日=明天 09:00 / 一周=7 天后 09:00)。
-    /// 一律取"日历日 + 固定时刻",不能用 now+7×24h(会落在分组窗口外导致任务不可见)
+    /// 到期预设 → 具体时间(今日=今天 18:00 / 明日=明天 09:00 / 一周=7 天后 09:00 /
+    /// 长期=无到期时间)。一律取"日历日 + 固定时刻",不能用 now+7×24h
+    /// (会落在分组窗口外导致任务不可见)
     static func dueDate(forPreset preset: Int, now: Date = Date(), calendar: Calendar = .current) -> Date? {
         let day = calendar.startOfDay(for: now)
         switch preset {
         case 1: return calendar.date(byAdding: DateComponents(hour: 18), to: day)
         case 2: return calendar.date(byAdding: DateComponents(day: 1, hour: 9), to: day)
         case 3: return calendar.date(byAdding: DateComponents(day: 7, hour: 9), to: day)
+        case 5: return nil   // 长期待办:没有时间
         default: return nil
         }
     }
 
-    /// 条目属于哪个分组:1 今日(含无日期) 2 明日 3 一周(其余未完成:未来一周/逾期)
-    /// 4 历史(已完成)。保证任何未完成条目必然落在 1..3 之一,不会"加了看不见"。
-    /// 完成当天仍留在原分组(划线显示,可一键恢复),次日才归档到历史。
+    /// 条目属于哪个分组:1 今日 2 明日 3 一周(其余有期未完成:未来一周/逾期)
+    /// 5 长期(无到期时间) 4 历史(已完成)。保证任何未完成条目必然落在 1/2/3/5
+    /// 之一,不会"加了看不见"。完成当天仍留在原分组(划线显示,可一键恢复),
+    /// 次日才归档到历史。
     func bucket(of item: TodoItem, calendar: Calendar = .current) -> Int {
         if item.done {
             if let doneAt = item.doneAt, calendar.isDateInToday(doneAt) {
@@ -159,9 +162,9 @@ final class TodoStore: ObservableObject, JSONStore {
         return dueBucket(of: item, calendar: calendar)
     }
 
-    /// 按到期时间分组(未完成/当天已完成共用)
+    /// 按到期时间分组(未完成/当天已完成共用;无时间 = 长期)
     private func dueBucket(of item: TodoItem, calendar: Calendar) -> Int {
-        guard let due = item.due else { return 1 }
+        guard let due = item.due else { return 5 }
         if calendar.isDateInToday(due) { return 1 }
         if calendar.isDateInTomorrow(due) { return 2 }
         return 3

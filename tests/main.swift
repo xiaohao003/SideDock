@@ -22,20 +22,24 @@ expect(d3 > cal.date(byAdding: .day, value: 1, to: today)!, "预设 一周 → �
 let weekWindowEnd = cal.date(byAdding: .day, value: 8, to: today)!
 expect(d3 < weekWindowEnd, "预设 一周 → 落在一周视图窗口内(旧算法 now+7×24h 会越界)")
 
-// 五类样本全部可见
+// 五类样本全部可见(无日期 → 长期分组,不再混进今日)
 let store = TodoStore()
 store.add("今日任务", due: d1)
 store.add("明日任务", due: d2)
 store.add("一周任务", due: d3)
 store.add("逾期任务", due: cal.date(byAdding: .day, value: -1, to: today))
 store.add("无日期任务", due: nil)
-expect(store.count(for: 1) == 2, "今日计数 = 2(今日 + 无日期)")
+expect(store.count(for: 1) == 1, "今日计数 = 1(仅今日)")
 expect(store.count(for: 2) == 1, "明日计数 = 1")
 expect(store.count(for: 3) == 2, "一周计数 = 2(一周 + 逾期未完成)")
+expect(store.count(for: 5) == 1, "长期计数 = 1(无日期任务)")
 expect(store.count(for: 4) == 0, "历史计数 = 0")
 let unfinished = store.items.filter { !$0.done }.count
-let bucketed = (1...3).reduce(0) { $0 + store.count(for: $1) }
+let bucketed = (1...3).reduce(0) { $0 + store.count(for: $1) } + store.count(for: 5)
 expect(bucketed == unfinished, "每个未完成条目恰好落在一个分组(\(bucketed)/\(unfinished)),不存在看不见的任务")
+
+// 长期预设:无到期时间
+expect(TodoStore.dueDate(forPreset: 5) == nil, "预设 长期 → 无到期时间")
 
 // 用户踩到的原始场景:now+7×24h 生成的任务必须可见
 let legacy = TodoItem(title: "旧算法一周任务", due: Date().addingTimeInterval(7 * 86400))
@@ -44,12 +48,20 @@ expect(store.matches(legacy, filter: 3), "旧算法生成的 7 天后任务在\"
 // 完成流转:当天完成留在原分组,次日归档历史
 let first = store.items[0]
 store.toggle(first.id)
-expect(store.count(for: 1) == 2, "当天完成的今日任务仍留在\"今日\"分组(计数不变)")
+expect(store.count(for: 1) == 1, "当天完成的今日任务仍留在\"今日\"分组(计数不变)")
 expect(store.count(for: 4) == 0, "当天完成不立即进历史")
-let after = store.count(for: 1) + store.count(for: 2) + store.count(for: 3)
+let after = (1...3).reduce(0) { $0 + store.count(for: $1) } + store.count(for: 5)
 expect(after == unfinished, "完成未归档仍计入分组计数")
 store.toggle(first.id)
-expect(store.count(for: 1) == 2 && store.count(for: 4) == 0, "取消完成移出历史状态")
+expect(store.count(for: 1) == 1 && store.count(for: 4) == 0, "取消完成恢复正常")
+// 长期任务完成:当天留长期,次日进历史
+var longDone = TodoItem(title: "长期任务", due: nil)
+expect(store.bucket(of: longDone) == 5, "长期任务在长期分组")
+longDone.done = true
+longDone.doneAt = Date()
+expect(store.bucket(of: longDone) == 5, "当天完成的长期任务仍留在\"长期\"分组")
+longDone.doneAt = cal.date(byAdding: .day, value: -1, to: Date())
+expect(store.bucket(of: longDone) == 4, "昨日完成的长期任务进入历史")
 // 昨天完成的 → 历史
 var oldDone = store.items[0]
 oldDone.done = true

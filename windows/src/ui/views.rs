@@ -154,7 +154,7 @@ fn todo_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
     let preset_y = card.top() + 54.0;
     body_text(ui, Pos2::new(card.left() + 14.0, preset_y), egui::Align2::LEFT_CENTER, "到期：", 12.0, t.text2);
     let mut px = card.left() + 52.0;
-    for (label, idx) in [("今日", 1u8), ("明日", 2), ("一周", 3), ("历史", 4)] {
+    for (label, idx) in [("今日", 1u8), ("明日", 2), ("一周", 3), ("长期", 5), ("历史", 4)] {
         let on = idx != 4 && app.ui.todo_preset == idx;
         let ts = text_rect(ui, label, 11.0);
         let pill = Rect::from_min_size(Pos2::new(px, preset_y - 13.0), Vec2::new(ts.x + 20.0, 26.0));
@@ -179,9 +179,9 @@ fn todo_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
     }
 
     ui.add_space(8.0);
-    // 分组筛选(今日/明日/一周/历史 四枚带计数胶囊,渲染证据无"全部")
+    // 分组筛选(带计数胶囊;长期 = 无到期时间的待办)
     ui.horizontal(|ui| {
-        for (label, idx) in [("今日", 1u8), ("明日", 2), ("一周", 3), ("历史", 4)] {
+        for (label, idx) in [("今日", 1u8), ("明日", 2), ("一周", 3), ("长期", 5), ("历史", 4)] {
             let n = app.todos.count_for(idx, today);
             let label = format!("{label} {n}");
             let selected = app.ui.todo_filter == idx;

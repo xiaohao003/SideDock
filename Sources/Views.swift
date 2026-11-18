@@ -148,12 +148,13 @@ struct TodoTab: View {
                         .textFieldStyle(.plain)
                         .onSubmit(add)
                 }
-                // 到期预设(渲染证据:卡内一行"到期:" + 今日/明日/一周/历史,默认选中今日)
+                // 到期预设(渲染证据:卡内一行"到期:" + 胶囊,默认选中今日)
                 HStack(spacing: 6) {
                     Text("到期：").font(.system(size: 12)).foregroundStyle(theme.text2)
                     presetPill("今日", 1)
                     presetPill("明日", 2)
                     presetPill("一周", 3)
+                    presetPill("长期", 5)   // 无到期时间
                     presetPill("历史", 4)   // 跳到历史分组
                     Spacer()
                 }
@@ -161,11 +162,12 @@ struct TodoTab: View {
             .padding(.horizontal, 12).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
 
-            // 分组筛选(渲染证据:今日/明日/一周/历史 四枚带计数胶囊,无"全部")
+            // 分组筛选(渲染证据:带计数胶囊;长期 = 无到期时间的待办)
             HStack(spacing: 6) {
                 groupPill("今日", 1, store.count(for: 1))
                 groupPill("明日", 2, store.count(for: 2))
                 groupPill("一周", 3, store.count(for: 3))
+                groupPill("长期", 5, store.count(for: 5))
                 groupPill("历史", 4, store.count(for: 4))
                 Spacer()
             }

@@ -52,14 +52,16 @@ impl TodoStore {
 
     // MARK: 分组判定(单一事实源:计数、过滤、新增跳转共用同一套规则)
 
-    /// 到期预设 → 具体时间(今日=今天 18:00 / 明日=明天 09:00 / 一周=7 天后 09:00)。
-    /// 一律取"日历日 + 固定时刻",不能用 now+7×24h(会落在分组窗口外导致任务不可见)
+    /// 到期预设 → 具体时间(今日=今天 18:00 / 明日=明天 09:00 / 一周=7 天后 09:00 /
+    /// 长期=无到期时间)。一律取"日历日 + 固定时刻",不能用 now+7×24h
+    /// (会落在分组窗口外导致任务不可见)
     pub fn due_date_for_preset(preset: u8, now: DateTime<Local>) -> Option<DateTime<Local>> {
         let day = now.date_naive();
         let (days, hour, minute) = match preset {
             1 => (0, 18, 0),
             2 => (1, 9, 0),
             3 => (7, 9, 0),
+            5 => return None, // 长期待办:没有时间
             _ => return None,
         };
         let date = day + Duration::days(days as i64);
@@ -71,7 +73,7 @@ impl TodoStore {
         }
     }
 
-    /// 条目属于哪个分组:1 今日(含无日期) 2 明日 3 一周(其余未完成:未来一周/逾期)
+    /// 条目属于哪个分组:1 今日 2 明日 3 一周(其余有期未完成)5 长期(无到期时间)
     /// 4 历史(已完成)。完成当天仍留在原分组(划线显示,可一键恢复),
     /// 次日才归档到历史(与 macOS 版同一规则)。
     pub fn bucket_of(&self, item: &TodoItem, today: chrono::NaiveDate) -> u8 {
@@ -88,9 +90,9 @@ impl TodoStore {
         Self::due_bucket(item, today)
     }
 
-    /// 按到期时间分组(未完成/当天已完成共用)
+    /// 按到期时间分组(未完成/当天已完成共用;无时间 = 长期)
     fn due_bucket(item: &TodoItem, today: chrono::NaiveDate) -> u8 {
-        let Some(due) = item.due else { return 1 };
+        let Some(due) = item.due else { return 5 };
         let d = due.date_naive();
         if d == today {
             return 1;
@@ -159,7 +161,7 @@ mod tests {
             "预设 一周 → 落在一周视图窗口内(旧算法 now+7×24h 会越界)"
         );
 
-        // 五类样本全部可见
+        // 五类样本全部可见(无日期 → 长期分组,不再混进今日)
         let mut store = store_with(&[
             ("今日任务", Some(d1)),
             ("明日任务", Some(d2)),
@@ -167,16 +169,19 @@ mod tests {
             ("逾期任务", Some(local_ymd(now.year(), now.month(), now.day(), 0, 0) - Duration::days(1))),
             ("无日期任务", None),
         ]);
-        assert_eq!(store.count_for(1, today), 2, "今日计数 = 2(今日 + 无日期)");
+        assert_eq!(store.count_for(1, today), 1, "今日计数 = 1(仅今日)");
         assert_eq!(store.count_for(2, today), 1, "明日计数 = 1");
         assert_eq!(store.count_for(3, today), 2, "一周计数 = 2(一周 + 逾期未完成)");
+        assert_eq!(store.count_for(5, today), 1, "长期计数 = 1(无日期任务)");
         assert_eq!(store.count_for(4, today), 0, "历史计数 = 0");
         let unfinished = store.items.iter().filter(|it| !it.done).count();
-        let bucketed: usize = (1..=3).map(|f| store.count_for(f, today)).sum();
+        let bucketed: usize = (1..=3).map(|f| store.count_for(f, today)).sum::<usize>() + store.count_for(5, today);
         assert_eq!(
             bucketed, unfinished,
             "每个未完成条目恰好落在一个分组,不存在看不见的任务"
         );
+        // 长期预设:无到期时间
+        assert!(TodoStore::due_date_for_preset(5, now).is_none(), "预设 长期 → 无到期时间");
 
         // 用户踩到的原始场景:now+7×24h 生成的任务必须可见
         let legacy = TodoItem::new("旧算法一周任务".into(), Some(now + Duration::hours(7 * 24)));
@@ -185,12 +190,20 @@ mod tests {
         // 完成流转:当天完成留在原分组,次日归档历史
         let first = store.items[0].id;
         store.toggle(first);
-        assert_eq!(store.count_for(1, today), 2, "当天完成的今日任务仍留在\"今日\"分组(计数不变)");
+        assert_eq!(store.count_for(1, today), 1, "当天完成的今日任务仍留在\"今日\"分组(计数不变)");
         assert_eq!(store.count_for(4, today), 0, "当天完成不立即进历史");
-        let after: usize = (1..=3).map(|f| store.count_for(f, today)).sum();
+        let after: usize = (1..=3).map(|f| store.count_for(f, today)).sum::<usize>() + store.count_for(5, today);
         assert_eq!(after, unfinished, "完成未归档仍计入分组计数");
         store.toggle(first);
-        assert_eq!(store.count_for(1, today), 2, "取消完成恢复正常");
+        assert_eq!(store.count_for(1, today), 1, "取消完成恢复正常");
+        // 长期任务完成:当天留长期,次日进历史
+        let mut long_done = TodoItem::new("长期任务".into(), None);
+        assert_eq!(store.bucket_of(&long_done, today), 5, "长期任务在长期分组");
+        long_done.done = true;
+        long_done.done_at = Some(now);
+        assert_eq!(store.bucket_of(&long_done, today), 5, "当天完成的长期任务仍留在\"长期\"分组");
+        long_done.done_at = Some(now - Duration::days(1));
+        assert_eq!(store.bucket_of(&long_done, today), 4, "昨日完成的长期任务进入历史");
         // 昨天完成的 → 历史
         let mut old_done = store.items[0].clone();
         old_done.done = true;
