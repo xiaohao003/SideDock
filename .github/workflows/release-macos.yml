@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-tags: true # tag 触发时要能读到 tag message 作为 Release 正文
+          fetch-depth: 0 # tag 触发时读 tag message 作 Release 正文(fetch-tags 与浅克隆的 refspec 冲突)
 
       - name: Build app
         run: ./build.sh
