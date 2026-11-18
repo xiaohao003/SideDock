@@ -709,11 +709,12 @@ pub fn run() {
     }
     let options = eframe::NativeOptions {
         viewport,
-        // 后端默认 glow(OpenGL);白屏机器(虚拟显卡/远程桌面/老驱动)可用
-        // 环境变量 SIDEDOCK_RENDERER=wgpu 切换到 wgpu 软硬适配层
+        // 默认 wgpu(DirectX + WARP 软渲染兜底):远程桌面 RDP 只提供 OpenGL 1.1,
+        // glow 上下文能建但画不出(实机复现:帧心跳在跳、画面全白);
+        // SIDEDOCK_RENDERER=glow 可切回 OpenGL 后端
         renderer: match std::env::var("SIDEDOCK_RENDERER").as_deref() {
-            Ok("wgpu") => eframe::Renderer::Wgpu,
-            _ => eframe::Renderer::Glow,
+            Ok("glow") => eframe::Renderer::Glow,
+            _ => eframe::Renderer::Wgpu,
         },
         ..Default::default()
     };

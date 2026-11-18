@@ -3,7 +3,7 @@
 ; 特性:欢迎/许可 → 安装目录可选 → 开始菜单 → 桌面快捷方式(可选)→ 卸载注册
 
 #define MyAppName "SideDock"
-#define MyAppVersion "1.1.4"
+#define MyAppVersion "1.1.5"
 #define MyAppPublisher "xiaohao003"
 #define MyAppExeName "SideDock.exe"
 #define MyAppURL "https://github.com/xiaohao003/SideDock"
