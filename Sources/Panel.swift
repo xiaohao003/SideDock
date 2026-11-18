@@ -48,6 +48,7 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
     // 命中视图,宿主是 SwiftUI 内容的祖先,边带覆盖面板全部四边四角)
     var isExpandedCheck: () -> Bool = { true }
     var onGeometryChanged: ((NSRect) -> Void)?
+    var onInteraction: ((Bool) -> Void)?   // 缩放进行中(挂起悬停自动收起)
 
     static let band: CGFloat = 6
 
@@ -123,6 +124,7 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
         guard !dirs.isEmpty, let win = window else { return super.mouseDown(with: event) }
         resizeDirs = dirs
         resizeStart = (event.locationInWindow, win.frame)
+        onInteraction?(true)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -162,6 +164,7 @@ final class SideDockHostingView: NSHostingView<PanelRootView> {
             onGeometryChanged?(win.frame)
             resizeDirs = []
             resizeStart = nil
+            onInteraction?(false)
             return
         }
         super.mouseUp(with: event)
@@ -254,6 +257,7 @@ final class SidebarController: ObservableObject {
         }
         hostingView.isExpandedCheck = { [weak self] in self?.isExpanded ?? false }
         hostingView.onGeometryChanged = { [weak self] frame in self?.persistGeometry(frame) }
+        hostingView.onInteraction = { [weak self] on in self?.setInteracting(on) }
         panel.contentView = hostingView
 
         // 拖动空白移动窗口(isMovableByWindowBackground)后持久化原点
@@ -374,13 +378,19 @@ final class SidebarController: ObservableObject {
 
     private func cancelHoverTimer() { hoverTimer?.invalidate(); hoverTimer = nil }
 
-    /// 展开后鼠标移出面板 → 延迟收起(常驻模式下不收起)
+    /// 展开后鼠标移出面板 → 延迟收起(常驻模式下不收起)。
+    /// 拖拽缩放/移动窗口期间必须挂起:边缘拖动时光标会瞬间"出面板",
+    /// 不挂起会 1.2s 后把面板打回把手(用户实测"角上不能缩放/挪不动"的根因)
     func panelHoverChanged(_ entered: Bool) {
+        if isUserInteracting {
+            cancelExitCollapse()
+            return
+        }
         guard isExpanded, state.settings.autoExpand, !state.settings.pinned else { return }
         cancelExitCollapse()
         if !entered {
             exitCollapseTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { [weak self] _ in
-                guard let self, !self.state.settings.pinned else { return }
+                guard let self, !self.state.settings.pinned, !self.isUserInteracting else { return }
                 self.collapse()
             }
         }
@@ -388,23 +398,49 @@ final class SidebarController: ObservableObject {
 
     private func cancelExitCollapse() { exitCollapseTimer?.invalidate(); exitCollapseTimer = nil }
 
-    // MARK: 位置与尺寸(证据: 上下拖动把手调整位置 / 拖边缘角调整大小)
+    // MARK: 位置与尺寸
 
+    /// 收起态把手:上下拖动调位置(沿右缘)
     func dragHandleBy(dy: CGFloat) {
         state.settings.handleCenterY += dy
         applyGeometry(animated: false)
     }
 
-    func resizeBy(dWidth: CGFloat, dHeight: CGFloat) {
-        var s = state.settings
-        s.panelWidth = min(max(s.panelWidth + dWidth, Self.minPanelWidth), Self.maxPanelWidth)
-        s.panelHeight = min(max(s.panelHeight + dHeight, Self.minPanelHeight), Self.maxPanelHeight)
-        state.settings = s
-        applyGeometry(animated: false)
+    // MARK: 自由移动窗口(头部拖动 / 展开态把手拖动)
+
+    /// 拖拽窗口进行中(悬停自动收起挂起)
+    var isUserInteracting = false
+    private var windowDragStart: (mouse: NSPoint, origin: NSPoint)?
+
+    func beginWindowDrag() {
+        guard windowDragStart == nil else { return }
+        isUserInteracting = true
+        cancelExitCollapse()
+        windowDragStart = (NSEvent.mouseLocation, panel.frame.origin)
     }
 
-    func resizeWidthBy(_ d: CGFloat) { resizeBy(dWidth: d, dHeight: 0) }
-    func resizeHeightBy(_ d: CGFloat) { resizeBy(dWidth: 0, dHeight: d) }
+    func windowDragStep() {
+        guard let s = windowDragStart else { return }
+        let m = NSEvent.mouseLocation
+        panel.setFrameOrigin(NSPoint(x: s.origin.x + (m.x - s.mouse.x),
+                                     y: s.origin.y + (m.y - s.mouse.y)))
+    }
+
+    func endWindowDrag() {
+        guard windowDragStart != nil else { return }
+        windowDragStart = nil
+        isUserInteracting = false
+        var s = state.settings
+        s.panelOriginX = Double(panel.frame.origin.x)
+        s.panelOriginY = Double(panel.frame.origin.y)
+        state.settings = s
+    }
+
+    /// 宿主视图缩放边带的交互起止(同样挂起自动收起)
+    func setInteracting(_ on: Bool) {
+        isUserInteracting = on
+        if on { cancelExitCollapse() }
+    }
 }
 
 // MARK: - 根视图(把手在右侧,内容卡片在左)
@@ -459,7 +495,16 @@ struct HandleColumn: View {
         .onTapGesture { controller.toggleExpanded() }
         .gesture(
             DragGesture(minimumDistance: 4)
-                .onChanged { value in controller.dragHandleBy(dy: value.translation.height) }
+                .onChanged { v in
+                    if controller.isExpanded {
+                        // 展开态拖把手 = 自由移动整个窗口(与头部拖动一致)
+                        controller.beginWindowDrag()
+                        controller.windowDragStep()
+                    } else {
+                        controller.dragHandleBy(dy: v.translation.height)
+                    }
+                }
+                .onEnded { _ in controller.endWindowDrag() }
         )
         .onDrop(of: [.fileURL], isTargeted: state.uiBind(\.handleDropTargeted)) { providers in
             for p in providers {
@@ -499,10 +544,8 @@ struct PanelBody: View {
                 .fill(theme.bg)
                 .shadow(color: .black.opacity(0.28), radius: 18, x: -3, y: 4)
         )
-        .overlay(alignment: .leading) { ResizeEdge(axis: .width, controller: controller) }
-        .overlay(alignment: .bottom) { ResizeEdge(axis: .height, controller: controller) }
-        .overlay(alignment: .bottomLeading) { ResizeCorner(controller: controller) }
-        .padding(.trailing, 0)
+        // 边缘/角缩放已由宿主视图(SideDockHostingView)的 8 向边带统一处理,
+        // 旧 SwiftUI ResizeEdge/ResizeCorner 覆盖条与边带抢事件且角部数学不对,移除
     }
 }
 
@@ -552,10 +595,17 @@ struct PanelHeader: View {
             .help("收起侧边栏")
         }
         .contentShape(Rectangle())
+        // 头部即拖动条:按住拖动把窗口移到任意位置(按钮点击不受影响,
+        // 拖动需 5pt 位移才触发);旧的"沿右缘上下移动"手势改为自由移动
         .gesture(
             DragGesture(minimumDistance: 5)
-                .onChanged { v in controller.dragHandleBy(dy: v.translation.height) }
+                .onChanged { _ in
+                    controller.beginWindowDrag()
+                    controller.windowDragStep()
+                }
+                .onEnded { _ in controller.endWindowDrag() }
         )
+        .help("按住拖动移动面板")
     }
 
     private var weekdayText: String {
@@ -736,53 +786,7 @@ struct MusicCard: View {
     }
 }
 
-// MARK: - 边缘拖拽调整大小(证据: resizeStartWidth/Height + 光标)
-
-enum ResizeAxis { case width, height }
-
-struct ResizeEdge: View {
-    let axis: ResizeAxis
-    @ObservedObject var controller: SidebarController
-
-    var body: some View {
-        Group {
-            if axis == .width { Color.clear.frame(width: 7) } else { Color.clear.frame(height: 7) }
-        }
-        .contentShape(Rectangle())
-        .onHover { inside in
-            if inside {
-                if axis == .width { NSCursor.resizeLeftRight.push() } else { NSCursor.resizeUpDown.push() }
-            } else { NSCursor.pop() }
-        }
-        .gesture(
-            DragGesture(minimumDistance: 2)
-                .onChanged { v in
-                    if axis == .width { controller.resizeWidthBy(-v.translation.width) }
-                    else { controller.resizeHeightBy(v.translation.height) }
-                }
-        )
-    }
-}
-
-struct ResizeCorner: View {
-    @ObservedObject var controller: SidebarController
-
-    var body: some View {
-        // 原版渲染图无可见角落圆点:保留拖拽热区但不再画出
-        Circle().fill(Color.clear).frame(width: 10, height: 10)
-            .frame(width: 16, height: 16)
-            .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { NSCursor.closedHand.push() } else { NSCursor.pop() }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 2)
-                    .onChanged { v in
-                        controller.resizeBy(dWidth: -v.translation.width, dHeight: v.translation.height)
-                    }
-            )
-    }
-}
+// MARK: - 边缘拖拽调整大小(由宿主视图边带处理,见 SideDockHostingView)
 
 extension Notification.Name {
     static let sideDockGeometryReset = Notification.Name("sideDockGeometryReset")
