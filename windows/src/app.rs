@@ -310,8 +310,9 @@ impl App {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.inner_margin(egui::Margin::same(10)).fill(Color32::TRANSPARENT))
             .show(ctx, |ui| {
-                // 整窗圆角背景(窗口透明,四角透出)
-                let outer = ui.max_rect().expand(10.0);
+                // 整窗背景(max_rect 即窗口内容区;mac 透明窗口四角透出,
+                // Windows 不透明窗口四角由 clear_color 同色衔接)
+                let outer = ui.max_rect();
                 ui.painter().rect_filled(outer, CornerRadius::same(14), t.bg);
 
                 // ── 窗口框架交互:空白拖动移动窗口;边缘/角拖动调整大小
@@ -388,6 +389,12 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// Windows:不透明窗口,清屏色 = 面板底色(与圆角背景无缝衔接,避免四角露白)
+    #[cfg(windows)]
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        colors(self.settings.theme_is_dark).bg.to_normalized_gamma_f32()
+    }
+
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         // 首帧:窗口修饰(去任务栏条 + 置顶;位置按存储或停靠右缘)
         if !self.win_fixed {
@@ -648,16 +655,22 @@ fn setup_hotkey() -> Option<HotkeyHandles> {
 
 pub fn run() {
     let _ = data_dir(); // 确保数据目录存在
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title(WINDOW_TITLE)
+        .with_inner_size([PANEL_W, PANEL_H])
+        // StartResize(winit 拖边缩放)要求窗口可调整;无边框时无系统缩放边框,不受影响
+        .with_resizable(true)
+        .with_always_on_top()
+        .with_decorations(false)
+        .with_app_id(WINDOW_TITLE.to_owned());
+    // 透明窗口仅 macOS:egui/glow 在 Windows 上透明合成失效会整窗白屏
+    // (首次实机运行复现);Windows 用不透明窗口 + clear_color 同底色衔接圆角
+    #[cfg(not(windows))]
+    {
+        viewport = viewport.with_transparent(true);
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title(WINDOW_TITLE)
-            .with_inner_size([PANEL_W, PANEL_H])
-            // StartResize(winit 拖边缩放)要求窗口可调整;无边框时无系统缩放边框,不受影响
-            .with_resizable(true)
-            .with_always_on_top()
-            .with_transparent(true)
-            .with_decorations(false)
-            .with_app_id(WINDOW_TITLE.to_owned()),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
