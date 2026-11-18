@@ -39,7 +39,8 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          # 中文向导文件(Inno 6.3+ 官方语言目录)下载到 installer/
+          # 中文向导文件(Inno 6.3+ 官方语言目录)下载到 installer/(目录需先建)
+          New-Item -ItemType Directory -Force installer | Out-Null
           Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl" -OutFile "installer/ChineseSimplified.isl"
           $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter ISCC.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
           & $iscc installer.iss
