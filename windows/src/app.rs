@@ -83,6 +83,7 @@ pub struct App {
     last_theme_poll: Instant,
     last_dark: Option<bool>,
     last_settings_json: String,
+    frame_count: u64,
     win_fixed: bool,
     was_focused: bool,
     #[cfg(windows)]
@@ -122,6 +123,7 @@ impl App {
             last_theme_poll: Instant::now(),
             last_dark: None,
             last_settings_json: String::new(),
+            frame_count: 0,
             win_fixed: false,
             was_focused: false,
             #[cfg(windows)]
@@ -396,9 +398,16 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        // 帧心跳日志(约每 5s 一条):证明渲染循环活着,诊断"窗口在但画面白"
+        self.frame_count += 1;
+        if self.frame_count == 1 || self.frame_count % 17 == 0 {
+            log(&format!("frame {} tab={:?}", self.frame_count, self.settings.tab));
+        }
+
         // 首帧:窗口修饰(去任务栏条 + 置顶;位置按存储或停靠右缘)
         if !self.win_fixed {
             self.win_fixed = true;
+            log("first frame: window fixup");
             #[cfg(windows)]
             self.restore_window_placement();
         }
@@ -651,10 +660,39 @@ fn setup_hotkey() -> Option<HotkeyHandles> {
     Some(HotkeyHandles { _mgr: mgr })
 }
 
+// MARK: - 运行日志(诊断白屏类问题;%APPDATA%\SideDock\run.log)
+
+static LOG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+pub fn log(msg: &str) {
+    let _g = LOG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let path = crate::settings::data_dir().join("run.log");
+    let line = format!(
+        "{} {}\n",
+        chrono::Local::now().format("%m-%d %H:%M:%S%.3f"),
+        msg
+    );
+    use std::io::Write as _;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
 // MARK: - 入口
 
 pub fn run() {
     let _ = data_dir(); // 确保数据目录存在
+
+    // panic 也落日志(白屏/崩溃现场)
+    std::panic::set_hook(Box::new(|info| {
+        log(&format!("[panic] {}", info));
+    }));
+    log(&format!(
+        "=== SideDock 启动 (v{}) renderer={:?}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::var("SIDEDOCK_RENDERER").unwrap_or_default()
+    ));
+
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(WINDOW_TITLE)
         .with_inner_size([PANEL_W, PANEL_H])
@@ -671,12 +709,25 @@ pub fn run() {
     }
     let options = eframe::NativeOptions {
         viewport,
+        // 后端默认 glow(OpenGL);白屏机器(虚拟显卡/远程桌面/老驱动)可用
+        // 环境变量 SIDEDOCK_RENDERER=wgpu 切换到 wgpu 软硬适配层
+        renderer: match std::env::var("SIDEDOCK_RENDERER").as_deref() {
+            Ok("wgpu") => eframe::Renderer::Wgpu,
+            _ => eframe::Renderer::Glow,
+        },
         ..Default::default()
     };
+    log(&format!(
+        "run_native: renderer={:?}",
+        options.renderer
+    ));
     eframe::run_native(
         WINDOW_TITLE,
         options,
-        Box::new(|cc| Ok(Box::new(App::new(cc)))),
+        Box::new(|cc| {
+            log("creation context ok");
+            Ok(Box::new(App::new(cc)))
+        }),
     )
     .expect("SideDock 启动失败");
 }

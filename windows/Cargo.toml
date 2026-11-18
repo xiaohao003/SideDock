@@ -1,6 +1,6 @@
 [package]
 name = "sidedock"
-version = "1.1.3"
+version = "1.1.4"
 edition = "2021"
 description = "SideDock for Windows — 桌面侧边栏(待办/笔记/下载/暂存/密码/剪贴板)"
 license = "MIT"
@@ -9,8 +9,13 @@ license = "MIT"
 name = "SideDock"
 path = "src/main.rs"
 
+[build-dependencies]
+# 仅 Windows 构建需要(资源嵌入);cfg 门控避免非 Windows 平台引入
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 [dependencies]
-eframe = { version = "0.32", default-features = true }
+eframe = { version = "0.32", default-features = true, features = ["wgpu"] } # wgpu 备选后端(白屏机器可 SIDEDOCK_RENDERER=wgpu 切换)
 egui = "0.32"
 arboard = "3.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
