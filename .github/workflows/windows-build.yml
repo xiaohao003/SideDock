@@ -39,8 +39,8 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          # Inno 6.x 默认不带中文向导文件,从官方仓库取(仅 runner 内网可达)
-          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseSimplified.isl" -OutFile "installer/ChineseSimplified.isl"
+          # 中文向导文件(Inno 6.3+ 官方语言目录)下载到 installer/
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl" -OutFile "installer/ChineseSimplified.isl"
           $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter ISCC.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName
           & $iscc installer.iss
           if (-not (Test-Path "dist/SideDock-windows-setup.exe")) { throw "installer not produced" }
