@@ -315,9 +315,10 @@ impl App {
                 ui.painter().rect_filled(outer, CornerRadius::same(14), t.bg);
 
                 // ── 窗口框架交互:空白拖动移动窗口;边缘/角拖动调整大小
-                // (无边框窗口无系统修饰,走 egui StartDrag/StartResize 原生命令;
+                // (无边框窗口无系统修饰,走 egui StartDrag/BeginResize 原生命令;
                 //  先分配整窗矩形,后画的控件会优先吃掉交互,所以只有空白可拖)
-                let frame_resp = ui.allocate_rect(outer, egui::Sense::click());
+                // 注意 Sense::click() 不含 drag,drag_started 恒 false —— 必须 drag
+                let frame_resp = ui.allocate_rect(outer, egui::Sense::drag());
                 if frame_resp.drag_started() {
                     self.ui.moving_window = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -346,7 +347,7 @@ impl App {
                      egui::ResizeDirection::East, egui::CursorIcon::ResizeHorizontal),
                 ];
                 for (rect, dir, icon) in bands {
-                    let resp = ui.allocate_rect(rect, egui::Sense::click());
+                    let resp = ui.allocate_rect(rect, egui::Sense::drag());
                     if resp.hovered() {
                         ctx.set_cursor_icon(icon);
                     }
@@ -398,13 +399,15 @@ impl eframe::App for App {
         self.poll_platform(ctx);
         self.poll_timers(ctx);
 
-        // 空白拖动移动窗口:期间持续读取物理位置;松开即结束
+        // 空白拖动移动窗口:StartDrag 在 Windows 进入系统模态移动循环会阻塞
+        // egui 帧,松开返回后的第一帧必须补读最终位置,否则永远存不下
         if self.ui.moving_window {
             let pressed = ctx.input(|i| i.pointer.primary_down());
             if !pressed {
                 self.ui.moving_window = false;
-            } else if let Some((x, y)) = crate::platform::window_position(WINDOW_TITLE) {
-                self.settings.pos = Some((x as f32, y as f32));
+                if let Some((x, y)) = crate::platform::window_position(WINDOW_TITLE) {
+                    self.settings.pos = Some((x as f32, y as f32));
+                }
             }
         }
 
