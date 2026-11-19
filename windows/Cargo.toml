@@ -1,8 +1,8 @@
-[package]
+﻿[package]
 name = "sidedock"
-version = "1.1.9"
+version = "1.1.10"
 edition = "2021"
-description = "SideDock for Windows — 桌面侧边栏(待办/笔记/下载/暂存/密码/剪贴板)"
+description = "SideDock for Windows 鈥?妗岄潰渚ц竟鏍?寰呭姙/绗旇/涓嬭浇/鏆傚瓨/瀵嗙爜/鍓创鏉?"
 license = "MIT"
 
 [[bin]]
@@ -10,12 +10,12 @@ name = "SideDock"
 path = "src/main.rs"
 
 [build-dependencies]
-# 仅 Windows 构建需要(资源嵌入);cfg 门控避免非 Windows 平台引入
+# 浠?Windows 鏋勫缓闇€瑕?璧勬簮宓屽叆);cfg 闂ㄦ帶閬垮厤闈?Windows 骞冲彴寮曞叆
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
 [dependencies]
-eframe = { version = "0.32", default-features = true, features = ["wgpu"] } # wgpu 备选后端(白屏机器可 SIDEDOCK_RENDERER=wgpu 切换)
+eframe = { version = "0.32", default-features = true, features = ["wgpu"] } # wgpu 澶囬€夊悗绔?鐧藉睆鏈哄櫒鍙?SIDEDOCK_RENDERER=wgpu 鍒囨崲)
 egui = "0.32"
 arboard = "3.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -27,7 +27,7 @@ rand = "0.8"
 base64 = "0.22"
 dirs = "5"
 
-# Windows 专属依赖(非 Windows 平台编译时自动跳过;逻辑层走 platform 模块的替身实现)
+# Windows 涓撳睘渚濊禆(闈?Windows 骞冲彴缂栬瘧鏃惰嚜鍔ㄨ烦杩?閫昏緫灞傝蛋 platform 妯″潡鐨勬浛韬疄鐜?
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
 global-hotkey = "0.6"

@@ -1,9 +1,9 @@
-; installer.iss — SideDock Windows 安装向导(Inno Setup)
-; 构建:ISCC installer.iss(需先 cargo build --release)
-; 特性:欢迎/许可 → 安装目录可选 → 开始菜单 → 桌面快捷方式(可选)→ 卸载注册
+﻿; installer.iss 鈥?SideDock Windows 瀹夎鍚戝(Inno Setup)
+; 鏋勫缓:ISCC installer.iss(闇€鍏?cargo build --release)
+; 鐗规€?娆㈣繋/璁稿彲 鈫?瀹夎鐩綍鍙€?鈫?寮€濮嬭彍鍗?鈫?妗岄潰蹇嵎鏂瑰紡(鍙€?鈫?鍗歌浇娉ㄥ唽
 
 #define MyAppName "SideDock"
-#define MyAppVersion "1.1.9"
+#define MyAppVersion "1.1.10"
 #define MyAppPublisher "xiaohao003"
 #define MyAppExeName "SideDock.exe"
 #define MyAppURL "https://github.com/xiaohao003/SideDock"
@@ -29,13 +29,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-; 中文向导文件由 CI 从官方仓库下载到 installer/ 目录(Inno 6.x 默认不带)
+; 涓枃鍚戝鏂囦欢鐢?CI 浠庡畼鏂逛粨搴撲笅杞藉埌 installer/ 鐩綍(Inno 6.x 榛樿涓嶅甫)
 Name: "chinesesimplified"; MessagesFile: "installer\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "autostart"; Description: "开机自动启动"; GroupDescription: "其他选项:"
+Name: "autostart"; Description: "寮€鏈鸿嚜鍔ㄥ惎鍔?; GroupDescription: "鍏朵粬閫夐」:"
 
 [Files]
 Source: "target\release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -46,7 +46,7 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; 开机自启(注册表 Run 键,与应用内设置同一位置;卸载时清理)
+; 寮€鏈鸿嚜鍚?娉ㄥ唽琛?Run 閿?涓庡簲鐢ㄥ唴璁剧疆鍚屼竴浣嶇疆;鍗歌浇鏃舵竻鐞?
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SideDock"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]

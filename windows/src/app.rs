@@ -378,10 +378,11 @@ impl App {
     fn paint(&mut self, ctx: &Context, dark: bool) {
         let t: ThemeColors = colors(dark);
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.inner_margin(egui::Margin::same(10)).fill(Color32::TRANSPARENT))
+            // 窗口即面板:无外圈透明边(否则面板四周会露出一条黑边/桌面色);
+            // 内容的 10pt 内边距移到下方内层 Frame
+            .frame(egui::Frame::NONE.fill(Color32::TRANSPARENT))
             .show(ctx, |ui| {
-                // 整窗背景(max_rect 即窗口内容区;mac 透明窗口四角透出,
-                // Windows 不透明窗口四角由 clear_color 同色衔接)
+                // 整窗背景 = 圆角面板,四角透出桌面(透明窗口)
                 let outer = ui.max_rect();
                 ui.painter().rect_filled(outer, CornerRadius::same(14), t.bg);
 
@@ -430,33 +431,36 @@ impl App {
                     }
                 }
 
-                shell::header(ui, &t, &mut self.ui);
-                ui.add_space(8.0);
-                let counts = self.tab_counts();
-                shell::tab_bar(ui, self, &t, counts);
-                ui.add_space(8.0);
+                // 内容 10pt 内边距(原 CentralPanel 内边距移到这里:面板背景已铺满整窗,不再有外圈)
+                egui::Frame::NONE.inner_margin(egui::Margin::same(10)).show(ui, |ui| {
+                    shell::header(ui, &t, &mut self.ui);
+                    ui.add_space(8.0);
+                    let counts = self.tab_counts();
+                    shell::tab_bar(ui, self, &t, counts);
+                    ui.add_space(8.0);
 
-                let has_music = self.settings.show_music && self.music.snapshot().is_some();
-                let card_h = if has_music { 152.0 } else { 0.0 };
-                let inner = ui.max_rect();
-                let body_top = ui.cursor().top();
-                let body_r = Rect::from_min_max(
-                    Pos2::new(inner.left(), body_top),
-                    Pos2::new(inner.right(), inner.bottom() - card_h),
-                );
-                let art = self.music_texture(ctx);
-                ui.allocate_new_ui(egui::UiBuilder::new().max_rect(body_r), |ui| {
-                    views::body(ui, self, &t, ctx);
-                });
-                if has_music {
-                    let card_r = Rect::from_min_max(
-                        Pos2::new(inner.left(), inner.bottom() - card_h),
-                        Pos2::new(inner.right(), inner.bottom()),
+                    let has_music = self.settings.show_music && self.music.snapshot().is_some();
+                    let card_h = if has_music { 152.0 } else { 0.0 };
+                    let inner = ui.max_rect();
+                    let body_top = ui.cursor().top();
+                    let body_r = Rect::from_min_max(
+                        Pos2::new(inner.left(), body_top),
+                        Pos2::new(inner.right(), inner.bottom() - card_h),
                     );
-                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(card_r), |ui| {
-                        shell::music_card(ui, self, &t, art.as_ref());
+                    let art = self.music_texture(ctx);
+                    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(body_r), |ui| {
+                        views::body(ui, self, &t, ctx);
                     });
-                }
+                    if has_music {
+                        let card_r = Rect::from_min_max(
+                            Pos2::new(inner.left(), inner.bottom() - card_h),
+                            Pos2::new(inner.right(), inner.bottom()),
+                        );
+                        ui.allocate_new_ui(egui::UiBuilder::new().max_rect(card_r), |ui| {
+                            shell::music_card(ui, self, &t, art.as_ref());
+                        });
+                    }
+                });
             });
     }
 }
