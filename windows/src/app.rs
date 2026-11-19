@@ -17,9 +17,15 @@ use std::time::{Duration, Instant};
 pub const WINDOW_TITLE: &str = "SideDock";
 
 static CURRENT_DARK: AtomicBool = AtomicBool::new(false);
+static WINDOW_TRANSPARENT: AtomicBool = AtomicBool::new(false);
 
 pub fn current_dark() -> bool {
     CURRENT_DARK.load(Ordering::Relaxed)
+}
+
+/// 当前窗口是否透明(圆角外无方形底);不透明兜底 = SIDEDOCK_OPAQUE=1 或 glow 后端
+pub fn window_transparent() -> bool {
+    WINDOW_TRANSPARENT.load(Ordering::Relaxed)
 }
 
 // MARK: - 瞬时 UI 状态(对应 macOS 版 UIState)
@@ -456,10 +462,15 @@ impl App {
 }
 
 impl eframe::App for App {
-    /// Windows:不透明窗口,清屏色 = 面板底色(与圆角背景无缝衔接,避免四角露白)
+    /// Windows:透明窗口 → 清屏全透明(圆角外无方形底,直接透出桌面);
+    /// 不透明兜底(SIDEDOCK_OPAQUE=1 / glow)→ 清屏色 = 面板底色
     #[cfg(windows)]
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        colors(self.settings.theme_is_dark).bg.to_normalized_gamma_f32()
+        if window_transparent() {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            colors(self.settings.theme_is_dark).bg.to_normalized_gamma_f32()
+        }
     }
 
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
@@ -815,6 +826,17 @@ pub fn run() {
         std::env::var("SIDEDOCK_RENDERER").unwrap_or_default()
     ));
 
+    // 透明窗口(圆角外真正透明,不再有方形底):默认 wgpu 支持预乘 alpha 合成;
+    // glow 后端透明会整窗白屏(首次实机复现),glow 一律不透明;
+    // SIDEDOCK_OPAQUE=1 可强制不透明(此时窗口四角为方角,由 DWM 圆角兜底)
+    let renderer = match std::env::var("SIDEDOCK_RENDERER").as_deref() {
+        Ok("glow") => eframe::Renderer::Glow,
+        _ => eframe::Renderer::Wgpu,
+    };
+    let transparent = cfg!(not(windows))
+        || (renderer == eframe::Renderer::Wgpu
+            && std::env::var("SIDEDOCK_OPAQUE").as_deref() != Ok("1"));
+    WINDOW_TRANSPARENT.store(transparent, Ordering::Relaxed);
     let mut viewport = egui::ViewportBuilder::default()
         .with_title(WINDOW_TITLE)
         .with_inner_size([PANEL_W, PANEL_H])
@@ -823,21 +845,19 @@ pub fn run() {
         .with_always_on_top()
         .with_decorations(false)
         .with_app_id(WINDOW_TITLE.to_owned());
-    // 透明窗口仅 macOS:egui/glow 在 Windows 上透明合成失效会整窗白屏
-    // (首次实机运行复现);Windows 用不透明窗口 + clear_color 同底色衔接圆角
-    #[cfg(not(windows))]
-    {
+    if transparent {
         viewport = viewport.with_transparent(true);
     }
+    log(&format!(
+        "window transparent={} renderer={:?}",
+        transparent, renderer
+    ));
     let options = eframe::NativeOptions {
         viewport,
         // 默认 wgpu(DirectX + WARP 软渲染兜底):远程桌面 RDP 只提供 OpenGL 1.1,
         // glow 上下文能建但画不出(实机复现:帧心跳在跳、画面全白);
         // SIDEDOCK_RENDERER=glow 可切回 OpenGL 后端
-        renderer: match std::env::var("SIDEDOCK_RENDERER").as_deref() {
-            Ok("glow") => eframe::Renderer::Glow,
-            _ => eframe::Renderer::Wgpu,
-        },
+        renderer,
         ..Default::default()
     };
     log(&format!(

@@ -140,7 +140,7 @@ fn todo_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
         Pos2::new(card.left() + 30.0, card.top() + 22.0),
         Vec2::new(24.0, 24.0),
     );
-    let plus_resp = ui.allocate_rect(plus_r, Sense::click());
+    let plus_resp = ui.interact(plus_r, ui.id().with("todo_plus"), Sense::click());
     h_gradient_rect(&p, plus_r.shrink(1.0), t.accent, t.accent2, 12.0);
     icon_plus(&p, plus_r.shrink(6.0), Color32::WHITE, 2.2);
     // 输入框(绝对定位到加号同行)
@@ -158,7 +158,7 @@ fn todo_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
         let on = idx != 4 && app.ui.todo_preset == idx;
         let ts = text_rect(ui, label, 11.0);
         let pill = Rect::from_min_size(Pos2::new(px, preset_y - 13.0), Vec2::new(ts.x + 20.0, 26.0));
-        let resp = ui.allocate_rect(pill, Sense::click());
+        let resp = ui.interact(pill, ui.id().with(("todo_preset", idx)), Sense::click());
         if on {
             h_gradient_rect(&p, pill, t.accent, t.accent2, 13.0);
         } else {
@@ -230,6 +230,11 @@ fn todo_add(app: &mut App, today: chrono::NaiveDate) {
 fn todo_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, item: &crate::todo::TodoItem) {
     let h = 34.0;
     let (rect, hresp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click());
+    // 右键直接删除该条待办
+    if hresp.secondary_clicked() {
+        app.todos.remove(item.id);
+        return;
+    }
     let hovered = hresp.hovered();
     let p = ui.painter().clone();
     p.rect_filled(rect, CornerRadius::same(12), t.card);
@@ -239,7 +244,7 @@ fn todo_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, item: &crate::todo::Tod
         Pos2::new(rect.left() + 20.0, rect.center().y),
         Vec2::new(17.0, 17.0),
     );
-    let check_resp = ui.allocate_rect(circ.expand(4.0), Sense::click());
+    let check_resp = ui.interact(circ.expand(4.0), ui.id().with(("todo_check", item.id)), Sense::click());
     if item.done {
         p.circle_filled(circ.center(), 8.5, t.accent);
         icon_check(&p, circ.shrink(2.0), Color32::WHITE, 2.0);
@@ -264,7 +269,7 @@ fn todo_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, item: &crate::todo::Tod
     let mut rx = rect.right() - 10.0;
     if hovered {
         let xr = Rect::from_center_size(Pos2::new(rx - 8.0, rect.center().y), Vec2::new(14.0, 14.0));
-        let resp = ui.allocate_rect(xr.expand(4.0), Sense::click());
+        let resp = ui.interact(xr.expand(4.0), ui.id().with(("todo_del", item.id)), Sense::click());
         icon_x(&p, xr, alpha(t.text3, 180), 1.8);
         if resp.clicked() {
             app.todos.remove(item.id);
@@ -276,7 +281,7 @@ fn todo_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, item: &crate::todo::Tod
         let label = "标记为未完成";
         let tw = text_rect(ui, label, 10.0).x;
         let lr = Rect::from_min_size(Pos2::new(rx - tw, rect.center().y - 8.0), Vec2::new(tw, 16.0));
-        let resp = ui.allocate_rect(lr.expand(2.0), Sense::click());
+        let resp = ui.interact(lr.expand(2.0), ui.id().with(("todo_undo", item.id)), Sense::click());
         body_text(ui, lr.center(), egui::Align2::CENTER_CENTER, label, 10.0, if resp.hovered() { t.text2 } else { t.text3 });
         if resp.clicked() {
             app.todos.toggle(item.id);
@@ -318,7 +323,7 @@ fn notes_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
             Pos2::new(card.right() - 22.0, card.center().y),
             Vec2::new(20.0, 20.0),
         );
-        let bresp = ui.allocate_rect(br.expand(3.0), Sense::click());
+        let bresp = ui.interact(br.expand(3.0), ui.id().with("notes_save"), Sense::click());
         widgets::icon_arrow_up(ui.painter(), br, t.accent, 2.0);
         if enter || bresp.clicked() {
             let text = app.ui.notes_draft.trim().to_string();
@@ -374,7 +379,7 @@ fn notes_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
                     Pos2::new(rect.right() - 14.0, rect.bottom() - 12.0),
                     Vec2::new(12.0, 12.0),
                 );
-                let resp = ui.allocate_rect(xr.expand(3.0), Sense::click());
+                let resp = ui.interact(xr.expand(3.0), ui.id().with(("note_del", note.id)), Sense::click());
                 icon_x(&p, xr, alpha(t.text3, 180), 1.8);
                 if resp.clicked() {
                     app.notes.remove(note.id);
@@ -409,7 +414,7 @@ fn segmented(ui: &mut Ui, t: &ThemeColors, options: &[&str], selected: usize) ->
     for (i, o) in options.iter().enumerate() {
         let tw = text_rect(ui, o, 12.0).x + 32.0;
         let cell = Rect::from_min_size(Pos2::new(sx, rect.top() + 2.0), Vec2::new(tw, h));
-        let cresp = ui.allocate_rect(cell, Sense::click());
+        let cresp = ui.interact(cell, ui.id().with(("seg_cell", i)), Sense::click());
         if i == selected {
             p.rect_filled(cell, CornerRadius::same(6), sel_fill);
             p.rect_stroke(cell, CornerRadius::same(6), Stroke::new(1.0_f32, sel_stroke), StrokeKind::Inside);
@@ -439,7 +444,7 @@ fn search_capsule(ui: &mut Ui, t: &ThemeColors, buf: &mut String, placeholder: &
             Pos2::new(rect.right() - 14.0, rect.center().y),
             Vec2::new(12.0, 12.0),
         );
-        let xresp = ui.allocate_rect(xr.expand(3.0), Sense::click());
+        let xresp = ui.interact(xr.expand(3.0), ui.id().with("search_clear"), Sense::click());
         icon_x(&p, xr, t.text3, 1.6);
         if xresp.clicked() {
             buf.clear();
@@ -536,7 +541,7 @@ fn download_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, f: &crate::download
         let actions = [(icon_file as widgets::IconFn, 0u8), (widgets::icon_folder as widgets::IconFn, 1), (icon_trash as widgets::IconFn, 2)];
         for (icon, action) in actions {
             let br = Rect::from_center_size(Pos2::new(bx - 9.0, rect.center().y), Vec2::new(18.0, 18.0));
-            let bresp = ui.allocate_rect(br.expand(2.0), Sense::click());
+            let bresp = ui.interact(br.expand(2.0), ui.id().with(("dl_act", action, &f.path)), Sense::click());
             icon(&p, br, if bresp.hovered() { t.accent } else { t.text3 }, 1.6);
             if bresp.clicked() {
                 match action {
@@ -632,7 +637,7 @@ fn shelf_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
                             Pos2::new(rect.right() - 11.0, rect.top() + 11.0),
                             Vec2::new(12.0, 12.0),
                         );
-                        let xresp = ui.allocate_rect(xr.expand(3.0), Sense::click());
+                        let xresp = ui.interact(xr.expand(3.0), ui.id().with(("shelf_del", it.id)), Sense::click());
                         icon_x(&p, xr, alpha(t.text3, 200), 1.8);
                         if xresp.clicked() {
                             app.shelf.remove(it.id);
@@ -693,7 +698,7 @@ fn passwords_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
                     Pos2::new(card.right() - 26.0, y + 13.0),
                     Vec2::new(18.0, 18.0),
                 );
-                let wresp = ui.allocate_rect(wr.expand(3.0), Sense::click());
+                let wresp = ui.interact(wr.expand(3.0), ui.id().with("vault_gen"), Sense::click());
                 icon_wand(ui.painter(), wr, t.accent, 1.7);
                 if wresp.clicked() {
                     generate = true;
@@ -711,11 +716,11 @@ fn passwords_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
 
         // 保存 / 取消
         let save_r = Rect::from_min_size(Pos2::new(card.left() + 12.0, y), Vec2::new(64.0, 26.0));
-        let save = ui.allocate_rect(save_r, Sense::click());
+        let save = ui.interact(save_r, ui.id().with("vault_save"), Sense::click());
         h_gradient_rect(ui.painter(), save_r, t.accent, t.accent2, 6.0);
         body_text(ui, save_r.center(), egui::Align2::CENTER_CENTER, "保存", 12.0, Color32::WHITE);
         let cancel_r = Rect::from_min_size(Pos2::new(save_r.right() + 10.0, y), Vec2::new(64.0, 26.0));
-        let cancel = ui.allocate_rect(cancel_r, Sense::click());
+        let cancel = ui.interact(cancel_r, ui.id().with("vault_cancel"), Sense::click());
         body_text(ui, cancel_r.center(), egui::Align2::CENTER_CENTER, "取消", 12.0, t.text2);
         let can_save = !app.ui.vault_site.trim().is_empty() && !app.ui.vault_account.trim().is_empty();
         if cancel.clicked() {
@@ -801,7 +806,7 @@ fn vault_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, e: &crate::stores::Vau
     if hovered {
         for (icon, action) in [(icon_trash as widgets::IconFn, 2u8), (icon_pencil as widgets::IconFn, 1)] {
             let br = Rect::from_center_size(Pos2::new(rx - 9.0, rect.center().y), Vec2::new(18.0, 18.0));
-            let resp = ui.allocate_rect(br.expand(2.0), Sense::click());
+            let resp = ui.interact(br.expand(2.0), ui.id().with(("vault_act", action, e.id)), Sense::click());
             icon(&p, br, if resp.hovered() { t.accent } else { t.text3 }, 1.7);
             if resp.clicked() {
                 match action {
@@ -823,7 +828,7 @@ fn vault_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, e: &crate::stores::Vau
         rx -= tw + 8.0;
     }
     let eye_r = Rect::from_center_size(Pos2::new(rx - 9.0, rect.center().y), Vec2::new(18.0, 18.0));
-    let eresp = ui.allocate_rect(eye_r.expand(2.0), Sense::click());
+    let eresp = ui.interact(eye_r.expand(2.0), ui.id().with(("vault_eye", e.id)), Sense::click());
     icon_eye(&p, eye_r, if eresp.hovered() { t.text } else { t.text2 }, 1.7);
     if eresp.clicked() {
         if revealing {
@@ -861,7 +866,7 @@ fn vault_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, e: &crate::stores::Vau
             Pos2::new(er.right() + 8.0, er.top()),
             Pos2::new(er.right() + 72.0, er.bottom()),
         );
-        let sresp = ui.allocate_rect(sr, Sense::click());
+        let sresp = ui.interact(sr, ui.id().with(("vault_editsave", e.id)), Sense::click());
         h_gradient_rect(&p, sr, t.accent, t.accent2, 6.0);
         body_text(ui, sr.center(), egui::Align2::CENTER_CENTER, "保存", 12.0, Color32::WHITE);
         let save_hit = sresp.clicked() || (enter && !app.ui.vault_edit_pw.is_empty());
@@ -1040,14 +1045,14 @@ fn clip_row(ui: &mut Ui, app: &mut App, t: &ThemeColors, e: &crate::stores::Clip
     let mut rx = rect.right() - 8.0;
     if hovered {
         let tr = Rect::from_center_size(Pos2::new(rx - 8.0, rect.center().y), Vec2::new(14.0, 14.0));
-        let tresp = ui.allocate_rect(tr.expand(2.0), Sense::click());
+        let tresp = ui.interact(tr.expand(2.0), ui.id().with(("clip_pin", e.id)), Sense::click());
         icon_pin_small(&p, tr, if e.is_pinned() { t.accent } else { t.text2 }, 1.5);
         if tresp.clicked() {
             app.clipboard.toggle_pin(e.id);
         }
         rx -= 26.0;
         let xr = Rect::from_center_size(Pos2::new(rx - 8.0, rect.center().y), Vec2::new(14.0, 14.0));
-        let xresp = ui.allocate_rect(xr.expand(2.0), Sense::click());
+        let xresp = ui.interact(xr.expand(2.0), ui.id().with(("clip_del", e.id)), Sense::click());
         icon_trash(&p, xr, if xresp.hovered() { t.accent } else { t.text2 }, 1.5);
         if xresp.clicked() {
             app.clipboard.remove(e.id);
@@ -1188,8 +1193,9 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
             12.0,
             t.text2,
         );
-        let r2resp = ui.allocate_rect(
+        let r2resp = ui.interact(
             Rect::from_min_max(Pos2::new(card.left() + 12.0, card.top() + 40.0), Pos2::new(card.left() + 160.0, card.bottom() - 6.0)),
+            ui.id().with("settings_reset"),
             Sense::click(),
         );
         let r2 = r2resp.rect;
@@ -1240,7 +1246,7 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
 }
 
 fn toggle_switch_at(ui: &mut Ui, rect: Rect, on: &mut bool) {
-    let resp = ui.allocate_rect(rect, Sense::click());
+    let resp = ui.interact(rect, ui.id().with(("toggle", rect.left() as i32, rect.top() as i32)), Sense::click());
     if resp.clicked() {
         *on = !*on;
     }

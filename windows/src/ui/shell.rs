@@ -82,36 +82,36 @@ pub fn header(ui: &mut Ui, t: &ThemeColors, st: &mut crate::app::UIState) {
     }
 }
 
-/// Tab 胶囊条(横向滚动;选中渐变 + 徽标,渲染证据:间距 5)
+/// Tab 胶囊条(溢出自动换行,不出横向滚动条;选中渐变 + 徽标,渲染证据:间距 5)
 pub fn tab_bar(
     ui: &mut Ui,
     state: &mut crate::app::App,
     t: &ThemeColors,
     counts: [Option<u32>; 6],
 ) {
-    egui::ScrollArea::horizontal().show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for (i, tab) in PanelTab::ALL.into_iter().enumerate() {
-                let selected = state.settings.tab == tab;
-                let resp = capsule(
-                    ui,
-                    tab.title(),
-                    12.0,
-                    Some((widgets::tab_icon_of(tab), 14.0)),
-                    counts[i],
-                    selected,
-                    10.0,
-                    5.0,
-                    t,
-                    Color32::WHITE,
-                );
-                if resp.clicked() {
-                    state.settings.tab = tab;
-                    state.ui.settings_open = false;
-                }
-                ui.add_space(5.0);
+    // 溢出换行而非横向滚动;行距略大于默认 3pt,两行时不显挤
+    ui.spacing_mut().item_spacing.y = 6.0;
+    ui.horizontal_wrapped(|ui| {
+        for (i, tab) in PanelTab::ALL.into_iter().enumerate() {
+            let selected = state.settings.tab == tab;
+            let resp = capsule(
+                ui,
+                tab.title(),
+                12.0,
+                Some((widgets::tab_icon_of(tab), 14.0)),
+                counts[i],
+                selected,
+                10.0,
+                5.0,
+                t,
+                Color32::WHITE,
+            );
+            if resp.clicked() {
+                state.settings.tab = tab;
+                state.ui.settings_open = false;
             }
-        });
+            ui.add_space(5.0);
+        }
     });
 }
 
