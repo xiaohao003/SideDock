@@ -58,7 +58,7 @@ jobs:
         with:
           name: SideDock-windows-x64
           path: |
-            SideDock-windows-x64.zip
+            windows/SideDock-windows-x64.zip
             windows/dist/SideDock-windows-setup.exe
           retention-days: 30
 
