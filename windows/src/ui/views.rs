@@ -67,6 +67,22 @@ fn body_text(ui: &Ui, pos: Pos2, anchor: egui::Align2, s: impl Into<String>, siz
     ui.painter().text(pos, anchor, s.into(), FontId::proportional(size), color);
 }
 
+/// 绝对定位子 UI(不推进外层布局光标)。
+/// allocate_new_ui/scope 会按子矩形绝对位置重设外层光标,把光标拉回卡片顶部,
+/// 导致卡片后续内容(分组筛选/下一张卡)叠进来 —— 用后恢复光标到原位置。
+fn sub_ui_abs<R>(ui: &mut Ui, rect: Rect, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
+    let cursor_before = ui.cursor().min.y;
+    let spacing = ui.spacing().item_spacing.y;
+    let r = ui
+        .allocate_new_ui(egui::UiBuilder::new().max_rect(rect), add_contents)
+        .inner;
+    ui.advance_cursor_after_rect(Rect::from_min_max(
+        Pos2::new(rect.left(), cursor_before - spacing),
+        Pos2::new(rect.left() + 1.0, cursor_before - spacing),
+    ));
+    r
+}
+
 /// 绝对定位的单行输入框;返回 (响应, 是否回车提交)
 fn inline_edit(
     ui: &mut Ui,
@@ -76,7 +92,7 @@ fn inline_edit(
     size: f32,
     password: bool,
 ) -> (egui::Response, bool) {
-    ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect), |ui| {
+    sub_ui_abs(ui, rect, |ui| {
         let mut edit = TextEdit::singleline(buf)
             .hint_text(hint)
             .font(FontId::proportional(size))
@@ -89,7 +105,6 @@ fn inline_edit(
         let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
         (resp, enter)
     })
-    .inner
 }
 
 /// 单行截断(字符级,避免多字节 panic)
@@ -1114,9 +1129,7 @@ fn settings_view(ui: &mut Ui, app: &mut App, t: &ThemeColors) {
             Pos2::new(card.right() - 12.0 - seg_w, card.top() + 6.0),
             Pos2::new(card.right() - 12.0, card.top() + 36.0),
         );
-        let picked = ui
-            .allocate_new_ui(egui::UiBuilder::new().max_rect(seg_r), |ui| segmented(ui, t, &labels, sel))
-            .inner;
+        let picked = sub_ui_abs(ui, seg_r, |ui| segmented(ui, t, &labels, sel));
         if let Some(i) = picked {
             let mode = modes[i];
             app.settings.theme_mode = mode;
