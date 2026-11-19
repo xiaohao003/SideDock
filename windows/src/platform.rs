@@ -284,33 +284,18 @@ pub fn open_path(path: &Path) {
 pub fn reveal_in_explorer(path: &Path) {
     #[cfg(windows)]
     {
-        use std::os::windows::ffi::OsStrExt;
-        // 首选 Shell API:打开所在文件夹并选中该条目(无引号/空格解析问题)
-        unsafe {
-            use windows::core::PCWSTR;
-            use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-            if let Ok(pidl) = windows::Win32::UI::Shell::ILCreateFromPathW(PCWSTR(wide.as_ptr())) {
-                let _ = windows::Win32::UI::Shell::SHOpenFolderAndSelectItems(pidl, 0, None, 0);
-                windows::Win32::UI::Shell::ILFree(pidl);
-                return;
-            }
-        }
-        // 兜底:explorer /select。注意 explorer 解析的是原始命令行,
-        // Command 普通参数会把 "/select,C:\a b\c" 整段加引号导致打不开,
-        // 必须用 raw_arg 手动只给路径部分加引号
-        {
-            use std::os::windows::process::CommandExt;
-            if std::process::Command::new("explorer")
-                .raw_arg(format!("/select,\"{}\"", path.display()))
-                .spawn()
-                .is_err()
-            {
-                // 仍失败则打开父目录
-                if let Some(parent) = path.parent() {
-                    open_path(parent);
-                }
+        // explorer 解析的是原始命令行:Command 普通 .arg 会把 "/select,C:\a b\c"
+        // 整段加引号,explorer 认不出来,表现为"点了没反应";
+        // 必须用 raw_arg 且只给路径部分加引号
+        use std::os::windows::process::CommandExt;
+        let spawned = std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{}\"", path.display()))
+            .spawn()
+            .is_ok();
+        if !spawned {
+            // 兜底:直接打开父目录
+            if let Some(parent) = path.parent() {
+                open_path(parent);
             }
         }
     }
