@@ -201,6 +201,9 @@ impl App {
     /// 用户移动过(settings.pos)按存储位置,否则停靠所在屏右缘垂直居中。
     /// 之前用 Win32 物理坐标 SetWindowPos,RDP(DPI/多屏)下算错位置,
     /// 窗口整体偏出屏幕只剩一条可见(实机复现)。
+    /// 存储位置在恢复前会做越界校验(见 clamp_pos_onscreen):
+    /// RDP 重连改分辨率/缩放后,旧位置可能整体落在屏幕外——热键/托盘"显示"
+    /// 只会按旧位置再摆一次,面板永远找不到,应用表现为"启动了但不能用"。
     fn restore_window_placement(&self, ctx: &Context) {
         #[cfg(windows)]
         crate::platform::style_window(WINDOW_TITLE); // 去任务栏 + 置顶(仅样式)
@@ -210,13 +213,63 @@ impl App {
             Some(m) => (m.x, m.y),
             None => (win.width() * 2.0, win.height() * 2.0),
         };
-        if let Some((x, y)) = self.settings.pos {
-            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
-        } else {
-            let x = sw - win.width() - 8.0;
-            let y = (sh - win.height()) / 2.0;
-            ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(x, y)));
+        let dock = (sw - win.width() - 8.0, (sh - win.height()) / 2.0);
+        let target = match self.settings.pos {
+            Some((x, y)) => match self.clamp_pos_onscreen(ctx, x, y, win.width(), win.height()) {
+                Some(clamped) => {
+                    if (clamped.0 - x).abs() > 0.5 || (clamped.1 - y).abs() > 0.5 {
+                        log(&format!(
+                            "restore: saved pos ({x:.0},{y:.0}) 越界 → 夹回 ({:.0},{:.0})",
+                            clamped.0, clamped.1
+                        ));
+                    }
+                    clamped
+                }
+                None => {
+                    log(&format!("restore: saved pos ({x:.0},{y:.0}) 无效 → 停靠右缘"));
+                    dock
+                }
+            },
+            None => dock,
+        };
+        log(&format!(
+            "restore: pos=({:.0},{:.0}) monitor={:?} scale={:?}",
+            target.0,
+            target.1,
+            monitor,
+            ctx.input(|i| i.viewport().native_pixels_per_point)
+        ));
+        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(egui::pos2(target.0, target.1)));
+    }
+
+    /// 把保存的位置校验/夹回虚拟桌面(所有显示器包围盒)可见范围,egui 点坐标。
+    ///
+    /// 返回 None 表示位置无效(非有限值),应回退停靠;
+    /// 虚拟桌面信息不可得(非 Windows/取不到)时原样放行。
+    fn clamp_pos_onscreen(&self, ctx: &Context, x: f32, y: f32, w: f32, h: f32) -> Option<(f32, f32)> {
+        if !(x.is_finite() && y.is_finite() && w > 0.0 && h > 0.0) {
+            return None;
         }
+        let vs: Option<(f32, f32, f32, f32)> = {
+            #[cfg(windows)]
+            {
+                // 物理像素 → egui 点(用窗口所在屏的真实缩放,与 egui-winit 同一套换算)
+                let scale = ctx
+                    .input(|i| i.viewport().native_pixels_per_point)
+                    .unwrap_or(1.0)
+                    .max(0.01);
+                crate::platform::virtual_screen_px()
+                    .map(|(px, py, pw, ph)| (px as f32 / scale, py as f32 / scale, pw as f32 / scale, ph as f32 / scale))
+            }
+            #[cfg(not(windows))]
+            {
+                None
+            }
+        };
+        let Some((vx, vy, vw, vh)) = vs else {
+            return Some((x, y)); // 判断不了就越界放行,保持旧行为
+        };
+        Some(clamp_into_bounds(x, y, w, h, vx, vy, vw, vh))
     }
 
     fn toggle_visible(&mut self, ctx: &Context) {
@@ -471,6 +524,64 @@ impl eframe::App for App {
 
         // 常驻心跳:隐藏状态下也保持轮询(托盘/热键由平台线程推动)
         ctx.request_repaint_after(Duration::from_millis(300));
+    }
+}
+
+/// 纯几何:把窗口左上角 (x,y) 夹到与虚拟桌面 (vx,vy,vw,vh) 至少相交
+/// min 可见面积的位置(egui 点坐标)。先 max 后 min,范围反转时不 panic。
+fn clamp_into_bounds(x: f32, y: f32, w: f32, h: f32, vx: f32, vy: f32, vw: f32, vh: f32) -> (f32, f32) {
+    let min_w = 160.0_f32.min(w);
+    let min_h = 96.0_f32.min(h);
+    let (right, bottom) = (vx + vw, vy + vh);
+    let cx = (x.max(vx + min_w - w)).min(right - min_w);
+    let cy = (y.max(vy + min_h - h)).min(bottom - min_h);
+    (cx, cy)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_into_bounds;
+
+    const W: f32 = 472.0;
+    const H: f32 = 519.0;
+
+    #[test]
+    fn valid_position_untouched() {
+        assert_eq!(clamp_into_bounds(100.0, 80.0, W, H, 0.0, 0.0, 1920.0, 1080.0), (100.0, 80.0));
+    }
+
+    #[test]
+    fn fully_offscreen_right_clamped_back() {
+        // RDP 改小分辨率后旧位置整窗在屏幕外 → 至少露出左缘 160pt
+        let (x, y) = clamp_into_bounds(3000.0, 200.0, W, H, 0.0, 0.0, 1920.0, 1080.0);
+        assert_eq!(x, 1920.0 - 160.0);
+        assert_eq!(y, 200.0);
+    }
+
+    #[test]
+    fn fully_offscreen_left_clamped_back() {
+        let (x, _) = clamp_into_bounds(-1500.0, 200.0, W, H, 0.0, 0.0, 1920.0, 1080.0);
+        assert_eq!(x, -(W - 160.0));
+    }
+
+    #[test]
+    fn clamped_at_virtual_screen_origin() {
+        // 多屏负坐标布局:虚拟桌面原点 (-1920,0);y 落到桌面上方 → 夹回露出上缘 96pt
+        let (x, y) = clamp_into_bounds(1200.0, -800.0, W, H, -1920.0, 0.0, 3840.0, 1080.0);
+        assert_eq!(x, 1200.0);
+        assert_eq!(y, 96.0 - H);
+    }
+
+    #[test]
+    fn extreme_values_do_not_panic() {
+        let _ = clamp_into_bounds(f32::NAN, 0.0, W, H, 0.0, 0.0, 100.0, 100.0);
+        let _ = clamp_into_bounds(0.0, f32::INFINITY, W, H, 0.0, 0.0, 100.0, 100.0);
+    }
+
+    #[test]
+    fn tiny_virtual_screen_does_not_panic() {
+        let (x, _) = clamp_into_bounds(50.0, 50.0, W, H, 0.0, 0.0, 100.0, 100.0);
+        assert!(x.is_finite());
     }
 }
 

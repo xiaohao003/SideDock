@@ -72,7 +72,9 @@ pub struct Settings {
     /// 底部正在播放卡片开关(对应 macOS 版 musicCardVisible)
     pub show_music: bool,
     /// 自由定位(对应 macOS 版 panelOriginX/Y):拖空白移动/拖边缘缩放后记录
-    /// 物理像素坐标;None = 未动过,仍停靠屏幕右缘
+    /// egui 逻辑点坐标(全局屏幕坐标,DPI/远程桌面无关);恢复时先经
+    /// app::clamp_pos_onscreen 夹回虚拟桌面可见范围,防止分辨率/缩放变化后
+    /// 旧位置把面板停到屏幕外。None = 未动过,仍停靠屏幕右缘
     pub pos: Option<(f32, f32)>,
 }
 

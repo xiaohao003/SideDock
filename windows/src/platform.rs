@@ -423,6 +423,34 @@ pub fn style_window(title: &str) {
 #[cfg(not(windows))]
 pub fn style_window(_title: &str) {}
 
+// MARK: - 虚拟桌面几何(所有显示器的包围盒;恢复持久化位置时防越界)
+
+/// 虚拟桌面包围盒(物理像素):SM_X/YVIRTUALSCREEN 原点 + SM_CX/CYVIRTUALSCREEN 尺寸。
+/// 恢复保存的窗口位置前用它判断/夹回可见范围(RDP 分辨率、缩放变化后面板丢失的兜底)。
+#[cfg(windows)]
+pub fn virtual_screen_px() -> Option<(i32, i32, i32, i32)> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+        SM_YVIRTUALSCREEN,
+    };
+    unsafe {
+        let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if w > 0 && h > 0 {
+            Some((x, y, w, h))
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn virtual_screen_px() -> Option<(i32, i32, i32, i32)> {
+    None
+}
+
 // MARK: - 中文字体(egui 默认字库无 CJK,优先微软雅黑)
 
 #[cfg(windows)]
