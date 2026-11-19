@@ -381,9 +381,12 @@ impl App {
 
                 // ── 窗口框架交互:空白拖动移动窗口;边缘/角拖动调整大小
                 // (无边框窗口无系统修饰,走 egui StartDrag/BeginResize 原生命令;
-                //  先分配整窗矩形,后画的控件会优先吃掉交互,所以只有空白可拖)
-                // 注意 Sense::click() 不含 drag,drag_started 恒 false —— 必须 drag
-                let frame_resp = ui.allocate_rect(outer, egui::Sense::drag());
+                //  先注册整窗矩形,后画的控件会优先吃掉交互,所以只有空白可拖)
+                // ⚠ 必须用 interact(纯交互,不推进布局光标):
+                //   allocate_rect 会把光标"推进到矩形之后"——整窗矩形 + 8 个边缘带
+                //   走完后光标已越过窗口底,后续内容全部布局到窗口外被裁掉,
+                //   面板表现为"顶部一大片空白,内容贴底被裁"(v1.1.5~v1.1.7 白屏根因)
+                let frame_resp = ui.interact(outer, ui.id().with("frame_drag"), egui::Sense::drag());
                 if frame_resp.drag_started() {
                     self.ui.moving_window = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
@@ -411,8 +414,8 @@ impl App {
                     (egui::Rect::from_min_max(Pos2::new(r.right() - BAND, r.top() + CORNER), Pos2::new(r.right(), r.bottom() - CORNER)),
                      egui::ResizeDirection::East, egui::CursorIcon::ResizeHorizontal),
                 ];
-                for (rect, dir, icon) in bands {
-                    let resp = ui.allocate_rect(rect, egui::Sense::drag());
+                for (i, (rect, dir, icon)) in bands.into_iter().enumerate() {
+                    let resp = ui.interact(rect, ui.id().with(("resize_band", i)), egui::Sense::drag());
                     if resp.hovered() {
                         ctx.set_cursor_icon(icon);
                     }

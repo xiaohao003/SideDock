@@ -55,7 +55,9 @@ pub fn header(ui: &mut Ui, t: &ThemeColors, st: &mut crate::app::UIState) {
             Pos2::new(rx - 13.0, row.center().y),
             Vec2::new(26.0, 26.0),
         );
-        let resp = ui.allocate_rect(hit, Sense::click());
+        // interact 而非 allocate_rect:allocate_rect 的光标推进会把后续 Tab 条
+        // 顶回头栏行内造成重叠(interact 只注册交互,不动布局光标)
+        let resp = ui.interact(hit, ui.id().with(("hdr_btn", icon_id)), Sense::click());
         let color = if resp.hovered() { t.text } else { t.text2 };
         draw(&p, Rect::from_center_size(hit.center(), Vec2::new(18.0, 18.0)), color, 1.8);
         let clicked = resp.clicked();
@@ -201,13 +203,16 @@ pub fn music_card(
     type TransportFn = fn(&egui::Painter, Rect, Color32);
     let mut cx = rect.center().x - 56.0;
     let play_icon: TransportFn = if snap.playing { widgets::icon_pause } else { widgets::icon_play };
-    for (size, icon, key) in [
+    for (ki, (size, icon, key)) in [
         (16.0, widgets::icon_prev as TransportFn, crate::platform::MediaKey::Prev),
         (18.0, play_icon, crate::platform::MediaKey::PlayPause),
         (16.0, widgets::icon_next as TransportFn, crate::platform::MediaKey::Next),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let hit = Rect::from_center_size(Pos2::new(cx, cy), Vec2::new(30.0, 30.0));
-        let resp = ui.allocate_rect(hit, Sense::click());
+        let resp = ui.interact(hit, ui.id().with(("music_key", ki)), Sense::click());
         icon(
             &p,
             Rect::from_center_size(hit.center(), Vec2::new(size, size)),
