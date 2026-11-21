@@ -116,7 +116,7 @@ const TABS = [
   { id: 'Notes', title: '笔记', icon: 'note' },
   { id: 'Downloads', title: '下载', icon: 'download' },
   { id: 'Shelf', title: '暂存', icon: 'shelf' },
-  { id: 'Passwords', title: '密码', icon: 'key' },
+  { id: 'Passwords', title: '密码', icon: 'lock' },
   { id: 'Clipboard', title: '剪贴板', icon: 'clipboard' },
 ];
 
@@ -135,6 +135,59 @@ function showToast(kind, msg, error = false) {
 function toastActive(t) {
   return t && Date.now() < t.until;
 }
+
+// MARK: - 确认弹框(右键删除待办/笔记/密码前的二次确认)
+
+const confirmState = { open: false, resolve: null };
+let confirmBox = null;
+
+function ensureConfirmBox() {
+  if (confirmBox) return;
+  confirmBox = el(`<div class="confirm-overlay">
+    <div class="confirm-card">
+      <div class="confirm-icon">${Icon('trash', 20)}</div>
+      <div class="confirm-title"></div>
+      <div class="confirm-msg"></div>
+      <div class="confirm-hint">删除后无法恢复。</div>
+      <div class="confirm-btns">
+        <span class="confirm-btn cancel">取消</span>
+        <span class="confirm-btn danger">删除</span>
+      </div>
+    </div>
+  </div>`);
+  confirmBox.querySelector('.confirm-btn.cancel').addEventListener('click', () => closeConfirm(false));
+  confirmBox.querySelector('.confirm-btn.danger').addEventListener('click', () => closeConfirm(true));
+  confirmBox.addEventListener('click', (e) => { if (e.target === confirmBox) closeConfirm(false); });
+  document.body.appendChild(confirmBox);
+}
+
+function confirmDialog({ title, message, confirmText = '删除' }) {
+  ensureConfirmBox();
+  confirmBox.querySelector('.confirm-title').textContent = title;
+  confirmBox.querySelector('.confirm-msg').textContent = message;
+  confirmBox.querySelector('.confirm-btn.danger').textContent = confirmText;
+  confirmBox.classList.add('open');
+  confirmState.open = true;
+  return new Promise((resolve) => {
+    confirmState.resolve = resolve;
+    confirmBox.querySelector('.confirm-btn.danger').focus();
+  });
+}
+
+function closeConfirm(result) {
+  if (!confirmState.open) return;
+  confirmState.open = false;
+  confirmBox.classList.remove('open');
+  const resolve = confirmState.resolve;
+  confirmState.resolve = null;
+  if (resolve) resolve(result);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!confirmState.open) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeConfirm(false); }
+  else if (e.key === 'Enter') { e.preventDefault(); closeConfirm(true); }
+});
 
 // MARK: - 头部 / 日期
 
@@ -351,7 +404,12 @@ function updateTodo() {
       }
       row.querySelector('.check-circle').addEventListener('click', () => api.toggleTodo(item.id).then(updateCurrent));
       row.querySelector('.row-del').addEventListener('click', (e) => { e.stopPropagation(); api.removeTodo(item.id).then(updateCurrent); });
-      row.addEventListener('contextmenu', (e) => { e.preventDefault(); api.removeTodo(item.id).then(updateCurrent); }); // 右键直接删除
+      row.addEventListener('contextmenu', async (ev) => { // 右键删除:先弹确认
+        ev.preventDefault();
+        if (await confirmDialog({ title: '删除待办', message: `确定删除「${item.title}」吗?` })) {
+          api.removeTodo(item.id).then(updateCurrent);
+        }
+      });
       todoListBox.appendChild(row);
     }
   }
@@ -429,6 +487,12 @@ function updateNotes() {
       card.querySelector('.note-del').addEventListener('click', (e) => {
         e.stopPropagation();
         api.removeNote(note.id).then(updateCurrent);
+      });
+      card.addEventListener('contextmenu', async (ev) => { // 右键删除:先弹确认
+        ev.preventDefault();
+        if (await confirmDialog({ title: '删除笔记', message: `确定删除「${title}」吗?` })) {
+          api.removeNote(note.id).then(updateCurrent);
+        }
       });
       notesListBox.appendChild(card);
     }
@@ -678,7 +742,7 @@ function updateVault() {
     }
     const revealing = UI.vaultReveal && UI.vaultReveal.id === e.id;
     const row = el(`<div class="vault-row">
-      <span class="vault-keyblock">${Icon('key', 20)}</span>
+      <span class="vault-keyblock">${Icon('lock', 20)}</span>
       <div class="vault-main">
         <div class="vault-site"></div>
         <div class="vault-account${revealing ? ' revealed' : ''}"></div>
@@ -713,6 +777,12 @@ function updateVault() {
       }
     });
     row.querySelector('[data-a="del"]').addEventListener('click', () => api.removeVault(e.id).then(updateCurrent));
+    row.addEventListener('contextmenu', async (ev) => { // 右键删除:先弹确认
+      ev.preventDefault();
+      if (await confirmDialog({ title: '删除密码', message: `确定删除「${e.site}」的密码记录吗?` })) {
+        api.removeVault(e.id).then(updateCurrent);
+      }
+    });
     row.querySelector('[data-a="edit"]').addEventListener('click', () => {
       UI.vaultEditFor = e.id;
       UI.vaultEditPw = '';

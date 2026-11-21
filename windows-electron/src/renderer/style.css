@@ -800,3 +800,79 @@ button {
 }
 .music-transport .tbtn:hover { color: var(--accent); }
 .music-transport .tbtn svg { fill: currentColor; }
+
+/* ── 确认弹框(右键删除待办/笔记/密码) ── */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 14px;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+.confirm-overlay.open { display: flex; }
+.confirm-card {
+  width: 284px;
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 18px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  animation: confirm-pop 0.15s ease-out;
+  -webkit-app-region: no-drag;
+}
+@keyframes confirm-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.confirm-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.confirm-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.confirm-msg {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 6px;
+  text-align: center;
+  line-height: 1.5;
+  max-width: 254px;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.confirm-hint { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.confirm-btns { display: flex; gap: 8px; margin-top: 14px; width: 100%; }
+.confirm-btn {
+  flex: 1;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--pill);
+  color: var(--text);
+  user-select: none;
+}
+.confirm-btn:hover { filter: brightness(0.96); }
+.confirm-btn.danger { background: var(--danger); color: #fff; }
+.confirm-btn.danger:hover { filter: brightness(1.08); }
+.confirm-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
