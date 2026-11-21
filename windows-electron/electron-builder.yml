@@ -14,6 +14,9 @@ files:
   - package.json
   - "!**/*.test.*"
 
+# zip 免安装包命名(根级;NSIS 安装器名由 nsis.artifactName 覆盖)
+artifactName: SideDock-windows-x64.${ext}
+
 asar: true
 
 extraResources:
@@ -41,6 +44,3 @@ nsis:
   installerLanguages: [zh_CN, en_US]
   multiLanguageInstaller: true
   language: 2052
-
-zip:
-  artifactName: SideDock-windows-x64.${ext}
