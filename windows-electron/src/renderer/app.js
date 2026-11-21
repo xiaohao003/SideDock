@@ -206,19 +206,11 @@ function applyTheme() {
 
 function renderTabs() {
   if (!S) return;
-  const today = localDateStr(new Date());
-  const counts = [
-    S.todos.filter((it) => !it.done).length,
-    null, null,
-    S.shelf.length,
-    S.vault.length,
-    S.clips.length,
-  ];
   $tabs.innerHTML = '';
-  TABS.forEach((tab, i) => {
+  TABS.forEach((tab) => {
     const el = document.createElement('div');
     el.className = 'capsule' + (S.settings.tab === tab.id && !UI.settingsOpen ? ' selected' : '');
-    el.innerHTML = `${Icon(tab.icon, 14)}<span>${tab.title}</span>` + (counts[i] !== null && counts[i] !== undefined ? `<span class="badge">${counts[i]}</span>` : '');
+    el.innerHTML = `${Icon(tab.icon, 14)}<span>${tab.title}</span>`;
     el.addEventListener('click', () => {
       UI.settingsOpen = false;
       api.setTab(tab.id);
@@ -366,8 +358,7 @@ function updateTodo() {
   if (todoFiltersBox) {
     todoFiltersBox.innerHTML = '';
     for (const [label, idx] of [['今日', 1], ['明日', 2], ['一周', 3], ['长期', 5], ['历史', 4]]) {
-      const n = countFor(S.todos, idx, today);
-      const pill = el(`<span class="filter-pill${UI.todoFilter === idx ? ' selected' : ''}">${label} ${n}</span>`);
+      const pill = el(`<span class="filter-pill${UI.todoFilter === idx ? ' selected' : ''}">${label}</span>`);
       pill.addEventListener('click', () => { UI.todoFilter = idx; updateTodo(); });
       todoFiltersBox.appendChild(pill);
     }
@@ -1011,37 +1002,49 @@ function updateSettings() {
 
 // MARK: - 音乐卡
 
+let musicSig = ''; // 音乐卡签名:元数据没变就不重建 DOM(进度条/时间文本单独更新,防吞点击)
 function renderMusic() {
   if (!S || !S.settings.show_music || !music || (!music.title && !music.artist)) {
-    $music.innerHTML = '';
+    if ($music.innerHTML) $music.innerHTML = '';
     $music.style.display = 'none';
+    musicSig = '';
     return;
   }
   $music.style.display = '';
   const pos = displayPosition(music, Date.now() / 1000);
   const dur = music.duration_secs || 0;
   const frac = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : 0;
-  $music.innerHTML = `
-    <div class="music-card">
-      ${music.art_b64
-        ? `<img class="music-art" src="data:image/png;base64,${music.art_b64}" />`
-        : `<div class="music-art ph grad">${Icon('musicnote', 26)}</div>`}
-      <div class="music-title"></div>
-      <div class="music-artist"></div>
-      <div class="music-bar"><div class="fill" style="width:${(frac * 100).toFixed(1)}%"></div></div>
-      <div class="music-time cur">${mmss(pos)}</div>
-      <div class="music-time dur">${mmss(dur)}</div>
-      <div class="music-transport">
-        <span class="tbtn" data-k="prev">${Icon('prev', 16)}</span>
-        <span class="tbtn" data-k="playpause">${Icon(music.playing ? 'pause' : 'play', 18)}</span>
-        <span class="tbtn" data-k="next">${Icon('next', 16)}</span>
-      </div>
-    </div>`;
-  $music.querySelector('.music-title').textContent = music.title;
-  $music.querySelector('.music-artist').textContent = music.artist;
-  $music.querySelectorAll('.tbtn').forEach((b) => {
-    b.addEventListener('click', () => api.musicControl(b.dataset.k));
-  });
+  const sig = `${music.title}|${music.artist}|${music.playing ? 1 : 0}|${music.art_b64 ? 1 : 0}`;
+  if (sig !== musicSig) {
+    musicSig = sig;
+    $music.innerHTML = `
+      <div class="music-card">
+        ${music.art_b64
+          ? `<img class="music-art" src="data:image/png;base64,${music.art_b64}" />`
+          : `<div class="music-art ph grad">${Icon('musicnote', 26)}</div>`}
+        <div class="music-title"></div>
+        <div class="music-artist"></div>
+        <div class="music-bar"><div class="fill"></div></div>
+        <div class="music-time cur"></div>
+        <div class="music-time dur"></div>
+        <div class="music-transport">
+          <span class="tbtn" data-k="prev">${Icon('prev', 16)}</span>
+          <span class="tbtn" data-k="playpause">${Icon(music.playing ? 'pause' : 'play', 18)}</span>
+          <span class="tbtn" data-k="next">${Icon('next', 16)}</span>
+        </div>
+      </div>`;
+    $music.querySelector('.music-title').textContent = music.title;
+    $music.querySelector('.music-artist').textContent = music.artist;
+    $music.querySelectorAll('.tbtn').forEach((b) => {
+      b.addEventListener('click', () => api.musicControl(b.dataset.k));
+    });
+  }
+  const fill = $music.querySelector('.music-bar .fill');
+  if (fill) fill.style.width = `${(frac * 100).toFixed(1)}%`;
+  const cur = $music.querySelector('.music-time.cur');
+  if (cur) cur.textContent = mmss(pos);
+  const durEl = $music.querySelector('.music-time.dur');
+  if (durEl) durEl.textContent = mmss(dur);
 }
 
 // MARK: - 拖放(暂存;仅暂存页接受)
@@ -1113,6 +1116,21 @@ document.addEventListener('keydown', (e) => {
 
 // MARK: - 启动
 
+// 低频自动刷新的状态签名:待办 完成/逾期/临近到期 跨越时才重建视图
+let lastAutoDay = null;
+let lastTodoSig = '';
+function todoVisualSig(today) {
+  const now = Date.now();
+  return today + '|' + S.todos.map((t) => {
+    let due = '-';
+    if (t.due) {
+      const ms = new Date(t.due).getTime();
+      due = ms < now ? 'o' : (ms - now < 2 * 3600 * 1000 ? 's' : 'f');
+    }
+    return `${t.id}:${t.done ? 1 : 0}:${due}`;
+  }).join(',');
+}
+
 function init() {
   document.getElementById('btn-hide').innerHTML = Icon('chevron', 18);
   document.getElementById('btn-pin').innerHTML = Icon('pin', 18);
@@ -1139,7 +1157,7 @@ function init() {
     buildView();
     renderMusic();
   });
-  api.onState((s) => { S = s; applyTheme(); updateHeaderPin(); updateAll(); });
+  api.onState((s) => { S = s; applyTheme(); updateHeaderPin(); updateAll(); lastTodoSig = ''; });
   api.onMusic((m) => { music = m; renderMusic(); });
   api.onUi((u) => {
     if (u && u.settings_open) {
@@ -1149,10 +1167,25 @@ function init() {
     }
   });
 
-  // 音乐进度插值 / toast 过期 / 揭示超时
+  // 音乐进度插值(只改文本/进度条)+ 低频自动刷新。
+  // 视图 DOM 只在真正跨状态时重建(toast/揭示过期、日期翻转、逾期/临近到期跨越),
+  // 平时不动 DOM,否则 500ms 一次的重建会吞掉用户的点击(筛选/勾选/播放键)。
   setInterval(() => {
     renderMusic();
-    if (S) updateCurrent();
+    if (!S) return;
+    const today = localDateStr(new Date());
+    const toastExpired = (UI.clipToast && !toastActive(UI.clipToast)) || (UI.vaultToast && !toastActive(UI.vaultToast));
+    const revealExpired = UI.vaultReveal && Date.now() > UI.vaultReveal.until;
+    const dayRolled = lastAutoDay !== null && today !== lastAutoDay;
+    const sig = todoVisualSig(today);
+    lastAutoDay = today;
+    if (toastExpired || revealExpired || dayRolled || (sig !== lastTodoSig && lastTodoSig !== '')) {
+      if (UI.clipToast && !toastActive(UI.clipToast)) UI.clipToast = null;
+      if (UI.vaultToast && !toastActive(UI.vaultToast)) UI.vaultToast = null;
+      if (UI.vaultReveal && Date.now() > UI.vaultReveal.until) UI.vaultReveal = null;
+      updateCurrent();
+    }
+    lastTodoSig = sig;
   }, 500);
 }
 

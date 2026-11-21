@@ -354,7 +354,13 @@ function refreshDownloads() {
     });
   }
   result.sort((a, b) => new Date(b.date) - new Date(a.date));
-  downloads = result.slice(0, 60);
+  const next = result.slice(0, 60);
+  // 内容没变就不推送:无条件每 2s 推一次会让渲染层全量重建列表,吞掉用户点击
+  const sig = (list, err) => (err ? 'E|' : '') + list.map((f) => `${f.path}|${f.size}|${f.is_partial ? 1 : 0}|${f.date}`).join('\n');
+  if (sig(next, downloadsReadError) !== sig(downloads, downloadsReadError)) {
+    downloads = next;
+    schedulePush();
+  }
 }
 
 // MARK: - 状态推送(150ms 去抖)
@@ -672,12 +678,9 @@ if (!gotLock) {
     setupTray();
     setupHotkey();
 
-    // 轮询:剪贴板 600ms / 下载 2s / 音乐推送 1s(位置插值由渲染层做)
+    // 轮询:剪贴板 600ms / 下载 2s(仅内容变化才推送)/ 音乐推送 1s(位置插值由渲染层做)
     setInterval(pollClipboard, 600);
-    setInterval(() => {
-      refreshDownloads();
-      schedulePush();
-    }, 2000);
+    setInterval(refreshDownloads, 2000);
     setInterval(() => {
       if (win && !win.isDestroyed() && music.snapshot) {
         win.webContents.send('music', music.snapshot);
