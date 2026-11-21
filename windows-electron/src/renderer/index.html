@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'" />
+  <title>SideDock</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="light">
+  <div id="shell">
+    <header id="hdr">
+      <div class="logo">SD</div>
+      <div class="date">
+        <div id="weekday" class="weekday"></div>
+        <div id="datestr" class="datestr"></div>
+      </div>
+      <div class="hdr-actions no-drag">
+        <button id="btn-hide" class="icon-btn" title="收起"></button>
+        <button id="btn-pin" class="icon-btn" title="常驻模式"></button>
+        <button id="btn-gear" class="icon-btn" title="设置"></button>
+      </div>
+    </header>
+    <div id="tabbar" class="no-drag"></div>
+    <div id="view"></div>
+    <div id="music" class="no-drag"></div>
+  </div>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

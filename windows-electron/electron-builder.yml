@@ -1,0 +1,46 @@
+# electron-builder 配置 — Windows 安装向导(NISS)+ 便携 zip
+# 安装向导:欢迎 → 可选安装目录 → 开始菜单/桌面快捷方式 → 完成(对应 Inno Setup 版体验)
+appId: com.xiaohao003.sidedock
+productName: SideDock
+copyright: MIT License
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - scripts/**/*
+  - package.json
+  - "!**/*.test.*"
+
+asar: true
+
+extraResources:
+  # 托盘图标(Windows Tray 用 ico;打进 asar 会导致路径不可直接访问,放 resources/)
+  - from: build/icon.ico
+    to: icon.ico
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SideDock
+  artifactName: SideDock-windows-setup.${ext}
+  installerLanguages: [zh_CN, en_US]
+  multiLanguageInstaller: true
+  language: 2052
+
+zip:
+  artifactName: SideDock-windows-x64.${ext}

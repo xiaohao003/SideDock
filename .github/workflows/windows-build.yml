@@ -1,9 +1,10 @@
-name: Windows Build
+name: Windows Build (Electron)
 
+# v1.2.0 起 Windows 版为 Electron 实现(windows-electron/);旧 Rust 版(windows/)保留但不再构建
 on:
   push:
     branches: [main]
-    paths: ["windows/**", ".github/workflows/windows-build.yml"]
+    paths: ["windows-electron/**", ".github/workflows/windows-build.yml"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -15,63 +16,44 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: windows
+        working-directory: windows-electron
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # tag 触发时读 tag message 作 Release 正文(fetch-tags 与浅克隆的 refspec 冲突)
+          fetch-depth: 0 # tag 触发时读 tag message 作 Release 正文
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
         with:
-          workspaces: windows
+          node-version: 20
+          cache: npm
+          cache-dependency-path: windows-electron/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-fund --no-audit
 
       - name: Run tests
-        run: cargo test --release
+        run: npm test
 
-      - name: Build release exe
-        run: cargo build --release
+      - name: Build installer (NSIS) + zip
+        run: npx electron-builder --win nsis zip --publish never
+        env:
+          # 未签名:跳过代码签名检测
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Build installer (Inno Setup)
+      - name: Verify outputs
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force installer | Out-Null
-          # 中文向导文件(Inno 6.3+ 官方语言目录)下载到 installer/(目录需先建)
-          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl" -OutFile "installer/ChineseSimplified.isl"
-          $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $iscc) {
-            # choco 社区源近期不稳定:改用官方安装器静默安装
-            $exe = "$env:TEMP\innosetup.exe"
-            Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -UserAgent "github-actions" -MaximumRedirection 10 -OutFile $exe
-            $p = Start-Process -FilePath $exe -ArgumentList "/SILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
-            Write-Output "innosetup installer exit: $($p.ExitCode)"
-            $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          }
-          if (-not $iscc) {
-            choco install innosetup -y --no-progress
-            $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter ISCC.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          }
-          Write-Output "ISCC: $iscc"
-          & $iscc installer.iss
           if (-not (Test-Path "dist/SideDock-windows-setup.exe")) { throw "installer not produced" }
-
-      - name: Package
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/SideDock.exe dist/
-          Compress-Archive -Path dist/SideDock.exe -DestinationPath SideDock-windows-x64.zip -Force
+          if (-not (Test-Path "dist/SideDock-windows-x64.zip")) { throw "zip not produced" }
+          Get-ChildItem dist | Select-Object Name, Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SideDock-windows-x64
           path: |
-            windows/SideDock-windows-x64.zip
-            windows/dist/SideDock-windows-setup.exe
+            windows-electron/dist/SideDock-windows-setup.exe
+            windows-electron/dist/SideDock-windows-x64.zip
           retention-days: 30
 
       - name: Extract release notes
@@ -85,5 +67,5 @@ jobs:
         with:
           body_path: release-notes.md
           files: |
-            windows/SideDock-windows-x64.zip
-            windows/dist/SideDock-windows-setup.exe
+            windows-electron/dist/SideDock-windows-setup.exe
+            windows-electron/dist/SideDock-windows-x64.zip
