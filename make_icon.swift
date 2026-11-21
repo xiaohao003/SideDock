@@ -60,9 +60,12 @@ func drawIcon(size: Int) -> CGImage {
     ctx.setAllowsAntialiasing(true)
     ctx.setShouldAntialias(true)
 
-    let inset = k * 90
-    let rect = CGRect(x: inset, y: inset, width: s - inset * 2, height: s - inset * 2)
-    let shape = superellipsePath(in: rect, n: 5)
+    // 满画布绘制,轮廓用普通圆角矩形(半径≈19.5%)。
+    // 实测 macOS 26 的图标判定按 alpha 轮廓与系统圆角矩形蒙版比对:
+    // 超椭圆(n=5)四角曲率不匹配会被系统垫白色玻璃底板(图案被缩小挤在中间);
+    // 圆角矩形/直角方块(系统自行蒙版)则原样渲染无底板。
+    let rect = CGRect(x: 0, y: 0, width: s, height: s)
+    let shape = roundedRectPath(rect, radius: s * 0.195)
 
     // ---- 底板:品牌蓝→靛对角渐变(设计稿 135° #5B9FE0 → #2F7BFF 52% → #1E63D0)----
     ctx.addPath(shape)
