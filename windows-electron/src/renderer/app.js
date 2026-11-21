@@ -1114,6 +1114,18 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// MARK: - 界面缩放(字体/组件随窗口大小自适应)
+
+// 设计基准宽 = stores.PANEL_W(472);窗口越宽整体越大,越窄整体越小。
+// zoom 由 style.css 的 --ui-zoom 应用;宽高按 zoom 抵消后布局宽度始终 ≈ 设计宽,
+// 各组件在其内部自然缩放,不会出现文字溢出固定高度的行。
+const BASE_UI_WIDTH = 472;
+function applyUiScale() {
+  const z = Math.max(0.8, Math.min(1.8, window.innerWidth / BASE_UI_WIDTH));
+  document.documentElement.style.setProperty('--ui-zoom', z.toFixed(3));
+}
+window.addEventListener('resize', applyUiScale);
+
 // MARK: - 启动
 
 // 低频自动刷新的状态签名:待办 完成/逾期/临近到期 跨越时才重建视图
@@ -1132,6 +1144,7 @@ function todoVisualSig(today) {
 }
 
 function init() {
+  applyUiScale();
   document.getElementById('btn-hide').innerHTML = Icon('chevron', 18);
   document.getElementById('btn-pin').innerHTML = Icon('pin', 18);
   document.getElementById('btn-gear').innerHTML = Icon('gear', 18);

@@ -44,6 +44,7 @@ nsis:
   shortcutName: SideDock
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
+  include: build/installer.nsh
   artifactName: SideDock-windows-setup.${ext}
   installerLanguages: [zh_CN, en_US]
   multiLanguageInstaller: true
