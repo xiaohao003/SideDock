@@ -20,9 +20,11 @@ artifactName: SideDock-windows-x64.${ext}
 asar: true
 
 extraResources:
-  # 托盘图标(Windows Tray 用 ico;打进 asar 会导致路径不可直接访问,放 resources/)
+  # 托盘图标(Windows Tray 用 ico 路径字符串;icon.png 兜底;打进 asar 会导致路径不可直接访问,放 resources/)
   - from: build/icon.ico
     to: icon.ico
+  - from: build/icon.png
+    to: icon.png
 
 win:
   icon: build/icon.ico
@@ -40,6 +42,8 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: SideDock
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
   artifactName: SideDock-windows-setup.${ext}
   installerLanguages: [zh_CN, en_US]
   multiLanguageInstaller: true

@@ -179,22 +179,45 @@ function toggleVisible() {
 function setupTray() {
   if (!isWin) return;
   try {
-    const iconPath = path.join(process.resourcesPath || __dirname, 'icon.ico');
-    const icon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : null;
-    tray = icon ? new Tray(icon) : new Tray(nativeImage.createEmpty());
-    tray.setToolTip(APP_TITLE);
-    const menu = Menu.buildFromTemplate([
-      { label: '显示面板', click: () => showPanel() },
-      { label: '设置', click: () => showPanel(true) },
-      { type: 'separator' },
-      { label: '退出', click: () => app.quit() },
-    ]);
-    tray.setContextMenu(menu);
-    tray.on('click', () => toggleVisible());
+    const icoPath = path.join(process.resourcesPath || __dirname, 'icon.ico');
+    const pngPath = path.join(process.resourcesPath || __dirname, 'icon.png');
+    // Windows 下必须把 .ico 的路径字符串直接交给 Tray(nativeImage 不解码 ICO,
+    // 空图像会造成"托盘没有图标");PNG 仅作兜底
+    let icon = icoPath;
+    if (!fs.existsSync(icoPath) && fs.existsSync(pngPath)) {
+      icon = nativeImage.createFromPath(pngPath);
+      if (icon.isEmpty()) icon = pngPath;
+    }
+    tray = new Tray(icon);
+    tray.setToolTip(`${APP_TITLE}(${logic.hotkeyDisplay(settings.hotkey)} 显示/隐藏)`);
+    tray.on('click', () => toggleVisible()); // 左键切换面板
+    tray.on('right-click', () => { if (tray && !tray.isDestroyed()) tray.popUpContextMenu(buildTrayMenu()); });
+    log(`tray: ok ico=${fs.existsSync(icoPath)} png=${fs.existsSync(pngPath)}`);
   } catch (e) {
     log(`tray setup failed: ${e.message}`);
     tray = null;
   }
+}
+
+function buildTrayMenu() {
+  return Menu.buildFromTemplate([
+    { label: '显示面板', click: () => showPanel() },
+    { label: '常驻模式', type: 'checkbox', checked: !!settings.pinned, click: (item) => {
+      settings.pinned = item.checked;
+      stores.saveSettings(settings);
+      schedulePush(); // 渲染层开关/图钉同步
+      if (item.checked && win && !win.isDestroyed()) showPanel();
+    } },
+    { label: '开机自启', type: 'checkbox', checked: !!settings.launch_at_login, click: (item) => {
+      const ok = setLaunchAtLogin(item.checked);
+      settings.launch_at_login = ok ? item.checked : settings.launch_at_login;
+      stores.saveSettings(settings);
+      schedulePush();
+    } },
+    { label: '设置', click: () => showPanel(true) },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() },
+  ]);
 }
 
 function setupHotkey() {
