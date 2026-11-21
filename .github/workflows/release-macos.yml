@@ -25,7 +25,7 @@ jobs:
         run: |
           swiftc Sources/AppState.swift Sources/Stores.swift Sources/Downloads.swift \
             Sources/PasteHelper.swift Sources/MusicController.swift Sources/ShelfBarController.swift \
-            Sources/Panel.swift Sources/Views.swift tests/main.swift -o /tmp/todo-test
+            Sources/Panel.swift Sources/Views.swift Sources/IconFont.swift tests/main.swift -o /tmp/todo-test
           mkdir -p /tmp/td
           SIDEDOCK_PROMOSHOT=1 SIDEDOCK_DATA_DIR=/tmp/td /tmp/todo-test
 
