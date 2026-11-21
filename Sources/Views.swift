@@ -36,7 +36,7 @@ struct CountRow<Actions: View>: View {
 
     var body: some View {
         HStack {
-            Text(title).font(.system(size: 12)).foregroundStyle(Theme.colors(dark: AppState.shared.settings.themeIsDark).text2)
+            Text(title).font(.app(12)).foregroundStyle(Theme.colors(dark: AppState.shared.settings.themeIsDark).text2)
             Spacer()
             actions()
         }
@@ -50,7 +50,7 @@ struct ActionLink: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(color)
+            Text(title).font(.app(12, weight: .medium)).foregroundStyle(color)
         }
         .buttonStyle(.plain)
     }
@@ -65,7 +65,7 @@ struct PillButton: View {
         let theme = Theme.colors(dark: AppState.shared.settings.themeIsDark)
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                .font(.app(12, weight: .semibold)).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 6)
                 .background(Capsule().fill(LinearGradient(colors: [theme.accent, theme.accent2],
                                                           startPoint: .leading, endPoint: .trailing)))
@@ -94,7 +94,7 @@ struct SegmentedBar: View {
                     onChange(i)
                 } label: {
                     Text(options[i])
-                        .font(.system(size: 12, weight: i == selection ? .semibold : .regular))
+                        .font(.app(12, weight: i == selection ? .semibold : .regular))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 5)
                         .background(
@@ -139,18 +139,18 @@ struct TodoTab: View {
                             .fill(LinearGradient(colors: [theme.accent, theme.accent2],
                                                  startPoint: .top, endPoint: .bottom))
                             .frame(width: 24, height: 24)
-                            .overlay(Image(systemName: "plus").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+                            .overlay(AppIcon("plus", 13).foregroundStyle(.white))
                     }
                     .buttonStyle(.plain)
                     .help("添加(回车亦可)")
                     TextField("添加待办，回车保存", text: state.uiBind(\.todoDraft))
-                        .font(.system(size: 13))
+                        .font(.app(13))
                         .textFieldStyle(.plain)
                         .onSubmit(add)
                 }
                 // 到期预设(渲染证据:卡内一行"到期:" + 胶囊,默认选中今日)
                 HStack(spacing: 6) {
-                    Text("到期：").font(.system(size: 12)).foregroundStyle(theme.text2)
+                    Text("到期：").font(.app(12)).foregroundStyle(theme.text2)
                     presetPill("今日", 1)
                     presetPill("明日", 2)
                     presetPill("一周", 3)
@@ -164,17 +164,17 @@ struct TodoTab: View {
 
             // 分组筛选(渲染证据:带计数胶囊;长期 = 无到期时间的待办)
             HStack(spacing: 6) {
-                groupPill("今日", 1, store.count(for: 1))
-                groupPill("明日", 2, store.count(for: 2))
-                groupPill("一周", 3, store.count(for: 3))
-                groupPill("长期", 5, store.count(for: 5))
-                groupPill("历史", 4, store.count(for: 4))
+                groupPill("今日", 1)
+                groupPill("明日", 2)
+                groupPill("一周", 3)
+                groupPill("长期", 5)
+                groupPill("历史", 4)
                 Spacer()
             }
 
             let items = filtered
             if items.isEmpty {
-                Text("暂无待办").font(.system(size: 12)).foregroundStyle(theme.text3)
+                Text("暂无待办").font(.app(12)).foregroundStyle(theme.text3)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             }
             // 渲染证据:行间距比卡片间距更紧
@@ -199,7 +199,7 @@ struct TodoTab: View {
             else { state.ui.todoPreset = idx }
         } label: {
             Text(title)
-                .font(.system(size: 11, weight: on ? .semibold : .regular))
+                .font(.app(11, weight: on ? .semibold : .regular))
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(Capsule().fill(on
                     ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2], startPoint: .leading, endPoint: .trailing))
@@ -210,16 +210,13 @@ struct TodoTab: View {
     }
 
     @ViewBuilder
-    private func groupPill(_ title: String, _ idx: Int, _ count: Int) -> some View {
+    private func groupPill(_ title: String, _ idx: Int) -> some View {
         let on = state.ui.todoFilter == idx
         Button {
             state.ui.todoFilter = idx
         } label: {
             // 渲染证据:计数是普通文字,不是小胶囊
-            HStack(spacing: 3) {
-                Text(title).font(.system(size: 11, weight: on ? .semibold : .regular))
-                Text("\(count)").font(.system(size: 10, weight: .semibold))
-            }
+            Text(title).font(.app(11, weight: on ? .semibold : .regular))
             .padding(.horizontal, 9).padding(.vertical, 5)
             .background(Capsule().fill(on
                 ? AnyShapeStyle(LinearGradient(colors: [theme.accent, theme.accent2], startPoint: .leading, endPoint: .trailing))
@@ -236,14 +233,20 @@ struct TodoTab: View {
             Button {
                 store.toggle(item.id)
             } label: {
-                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 17))
-                    .foregroundStyle(item.done ? theme.accent : theme.text3)
+                ZStack {
+                    if item.done {
+                        Circle().fill(theme.accent)
+                        AppIcon("check", 9).foregroundStyle(.white)
+                    } else {
+                        Circle().strokeBorder(theme.text3, lineWidth: 1.6)
+                    }
+                }
+                .frame(width: 17 * UIState.uiScale, height: 17 * UIState.uiScale)
             }
             .buttonStyle(.plain)
 
             Text(item.title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.app(14, weight: .medium))
                 .strikethrough(item.done)
                 .foregroundStyle(item.done ? theme.text3 : theme.text)
 
@@ -251,17 +254,17 @@ struct TodoTab: View {
 
             if item.done {
                 Button { store.toggle(item.id) } label: {
-                    Text("标记为未完成").font(.system(size: 10)).foregroundStyle(theme.text3)
+                    Text("标记为未完成").font(.app(10)).foregroundStyle(theme.text3)
                 }
                 .buttonStyle(.plain)
             } else if let due = item.due {
                 if due < Date() {
-                    Text("已逾期").font(.system(size: 11, weight: .medium)).foregroundStyle(theme.danger)
+                    Text("已逾期").font(.app(11, weight: .medium)).foregroundStyle(theme.danger)
                 } else if due < Date().addingTimeInterval(2 * 3600) {
                     // 渲染证据:只对 2 小时内即将到期的行显示铃铛时间
                     HStack(spacing: 2) {
-                        Image(systemName: "bell.fill").font(.system(size: 9))
-                        Text(due.formatted(date: .omitted, time: .shortened)).font(.system(size: 11))
+                        AppIcon("bell", 10)
+                        Text(due.formatted(date: .omitted, time: .shortened)).font(.app(11))
                     }
                     .foregroundStyle(theme.accent)
                 }
@@ -272,7 +275,7 @@ struct TodoTab: View {
                 Button {
                     store.items.removeAll { $0.id == item.id }
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 9)).foregroundStyle(theme.text3.opacity(0.7))
+                    AppIcon("x", 9).foregroundStyle(theme.text3.opacity(0.7))
                 }
                 .buttonStyle(.plain)
             }
@@ -281,6 +284,13 @@ struct TodoTab: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
         .contentShape(Rectangle())
         .onHover { state.ui.todoHover[item.id] = $0 }
+        .contextMenu {
+            Button("删除待办", role: .destructive) {
+                state.ui.deleteRequest = DeleteRequest(kind: "待办", title: item.title) {
+                    store.items.removeAll { $0.id == item.id }
+                }
+            }
+        }
     }
 
     private func add() {
@@ -312,9 +322,9 @@ struct NotesTab: View {
             if state.ui.notesAdding {
                 HStack(spacing: 8) {
                     TextField("回车保存,首行为标题", text: state.uiBind(\.notesDraft))
-                        .font(.system(size: 13)).onSubmit(addNote)
+                        .font(.app(13)).onSubmit(addNote)
                     Button(action: addNote) {
-                        Image(systemName: "arrow.up.circle.fill").font(.system(size: 18)).foregroundStyle(theme.accent)
+                        AppIcon("arrowUp", 18).foregroundStyle(theme.accent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -323,26 +333,26 @@ struct NotesTab: View {
             }
 
             if store.notes.isEmpty {
-                Text("还没有笔记").font(.system(size: 12)).foregroundStyle(theme.text3)
+                Text("还没有笔记").font(.app(12)).foregroundStyle(theme.text3)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             }
             ForEach(store.notes) { note in
                 let hovering = state.ui.notesHover[note.id] ?? false
                 VStack(alignment: .leading, spacing: 3) {
                     Text(note.text.split(whereSeparator: \.isNewline).first.map(String.init) ?? note.text)
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text).lineLimit(1)
+                        .font(.app(13, weight: .semibold)).foregroundStyle(theme.text).lineLimit(1)
                     let body = note.text.split(whereSeparator: \.isNewline).dropFirst().joined(separator: " ")
                     if !body.isEmpty {
-                        Text(body).font(.system(size: 11)).foregroundStyle(theme.text2).lineLimit(1)
+                        Text(body).font(.app(11)).foregroundStyle(theme.text2).lineLimit(1)
                     }
                     HStack {
                         Text(note.createdAt.formatted(.relative(presentation: .named)))
-                            .font(.system(size: 10)).foregroundStyle(theme.text3)
+                            .font(.app(10)).foregroundStyle(theme.text3)
                         Spacer()
                         // 渲染证据:卡片上不常显删除按钮,悬停才出现
                         if hovering {
                             Button { store.notes.removeAll { $0.id == note.id } } label: {
-                                Image(systemName: "xmark").font(.system(size: 9)).foregroundStyle(theme.text3.opacity(0.7))
+                                AppIcon("x", 9).foregroundStyle(theme.text3.opacity(0.7))
                             }
                             .buttonStyle(.plain)
                         }
@@ -352,6 +362,14 @@ struct NotesTab: View {
                 .background(RoundedRectangle(cornerRadius: 14).fill(theme.card))
                 .contentShape(Rectangle())
                 .onHover { state.ui.notesHover[note.id] = $0 }
+                .contextMenu {
+                    Button("删除笔记", role: .destructive) {
+                        let title = note.text.split(whereSeparator: \.isNewline).first.map(String.init) ?? note.text
+                        state.ui.deleteRequest = DeleteRequest(kind: "笔记", title: title) {
+                            store.notes.removeAll { $0.id == note.id }
+                        }
+                    }
+                }
             }
         }
     }
@@ -382,9 +400,9 @@ struct DownloadsTab: View {
                     store.refresh()
                 }
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(theme.text3)
+                    AppIcon("search", 12).foregroundStyle(theme.text3)
                     TextField("搜索", text: state.uiBind(\.downloadsSearch))
-                        .font(.system(size: 12))
+                        .font(.app(12))
                         .textFieldStyle(.plain)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
@@ -392,34 +410,34 @@ struct DownloadsTab: View {
                 Button {
                     NSWorkspace.shared.open(DownloadsStore.downloadsURL)
                 } label: {
-                    Image(systemName: "folder").font(.system(size: 13)).foregroundStyle(theme.text2)
+                    AppIcon("folder", 14).foregroundStyle(theme.text2)
                 }
                 .buttonStyle(.plain).help("打开下载文件夹")
             }
 
             if store.accessDenied {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("无法读取“下载”文件夹").font(.system(size: 12, weight: .semibold))
+                    Text("无法读取“下载”文件夹").font(.app(12, weight: .semibold))
                     Text("请在 系统设置 → 隐私与安全性 → 文件与文件夹 中允许访问。")
-                        .font(.system(size: 11)).foregroundStyle(theme.text2)
+                        .font(.app(11)).foregroundStyle(theme.text2)
                     Button("打开系统设置") {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .buttonStyle(.link).font(.system(size: 11))
+                    .buttonStyle(.link).font(.app(11))
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 12).fill(theme.danger.opacity(0.08)))
             } else if shown.isEmpty {
                 Text(store.recentOnly ? "最近 3 天没有新下载" : "没有匹配的文件")
-                    .font(.system(size: 12)).foregroundStyle(theme.text3)
+                    .font(.app(12)).foregroundStyle(theme.text3)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
                 ForEach(grouped.keys.sorted(by: { $0.order < $1.order }), id: \.rawValue) { group in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(group.title).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.text2)
+                        Text(group.title).font(.app(11, weight: .medium)).foregroundStyle(theme.text2)
                         ForEach(grouped[group] ?? []) { f in
                             DownloadRow(file: f, state: state, store: store)
                         }
@@ -485,15 +503,15 @@ struct DownloadRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name).lineLimit(1).truncationMode(.middle)
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(theme.text)
+                    .font(.app(13, weight: .medium)).foregroundStyle(theme.text)
                 HStack(spacing: 5) {
                     if file.isPartial {
-                        Text("下载中…").font(.system(size: 10)).foregroundStyle(.orange)
+                        Text("下载中…").font(.app(10)).foregroundStyle(.orange)
                     }
-                    Text(file.size >= 0 ? file.sizeText : "文件夹").font(.system(size: 10)).foregroundStyle(theme.text2)
-                    Text("·").font(.system(size: 10)).foregroundStyle(theme.text3)
+                    Text(file.size >= 0 ? file.sizeText : "文件夹").font(.app(10)).foregroundStyle(theme.text2)
+                    Text("·").font(.app(10)).foregroundStyle(theme.text3)
                     Text(file.date.formatted(.relative(presentation: .named)))
-                        .font(.system(size: 10)).foregroundStyle(theme.text2)
+                        .font(.app(10)).foregroundStyle(theme.text2)
                 }
             }
             Spacer(minLength: 0)
@@ -539,9 +557,9 @@ struct ShelfTab: View {
 
             if store.items.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "tray.and.arrow.down").font(.system(size: 24)).foregroundStyle(theme.text3)
-                    Text("把文件拖到这里暂存").font(.system(size: 12)).foregroundStyle(theme.text3)
-                    Text("暂存只记录文件位置,不会复制文件").font(.system(size: 10)).foregroundStyle(theme.text3.opacity(0.8))
+                    AppIcon("shelf", 24).foregroundStyle(theme.text3)
+                    Text("把文件拖到这里暂存").font(.app(12)).foregroundStyle(theme.text3)
+                    Text("暂存只记录文件位置,不会复制文件").font(.app(10)).foregroundStyle(theme.text3.opacity(0.8))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .frame(height: 190)
@@ -562,7 +580,7 @@ struct ShelfTab: View {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: item.path))
                                 .resizable().frame(width: 44, height: 44)
                             Text(item.url.lastPathComponent)
-                                .font(.system(size: 11)).foregroundStyle(theme.text)
+                                .font(.app(11)).foregroundStyle(theme.text)
                                 .lineLimit(2, reservesSpace: true)
                                 .multilineTextAlignment(.center)
                         }
@@ -599,15 +617,14 @@ struct MaccyClipboardList: View {
         VStack(alignment: .leading, spacing: 8) {
             // 搜索(Maccy 占位文案证据:"搜索…";可清除)
             HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(theme.text3)
+                AppIcon("search", 12).foregroundStyle(theme.text3)
                 TextField("搜索…", text: state.uiBind(\.clipSearch))
-                    .textFieldStyle(.plain).font(.system(size: 12))
+                    .textFieldStyle(.plain).font(.app(12))
                 if !state.ui.clipSearch.isEmpty {
                     Button {
                         state.ui.clipSearch = ""
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11)).foregroundStyle(theme.text3)
+                        AppIcon("x", 11).foregroundStyle(theme.text3)
                     }
                     .buttonStyle(.plain).help("清除搜索")
                 }
@@ -618,9 +635,9 @@ struct MaccyClipboardList: View {
             // 标题行(Maccy:清除 = 清未固定;⇧/全部清除是增强)
             HStack(spacing: 8) {
                 Text("\(clips.entries.count) 条 · 纯本地保存")
-                    .font(.system(size: 11)).foregroundStyle(theme.text2)
+                    .font(.app(11)).foregroundStyle(theme.text2)
                 if let toast = state.ui.clipToast {
-                    Text(toast).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.accent)
+                    Text(toast).font(.app(11, weight: .medium)).foregroundStyle(theme.accent)
                 }
                 Spacer(minLength: 0)
                 ActionLink(title: "清除", color: theme.accent) { clips.clearUnpinned() }
@@ -636,13 +653,12 @@ struct MaccyClipboardList: View {
             let rows = clips.visible(query: state.ui.clipSearch)
             if rows.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: state.ui.clipSearch.isEmpty ? "doc.on.clipboard" : "magnifyingglass")
-                        .font(.system(size: 24)).foregroundStyle(theme.text3)
+                    AppIcon(state.ui.clipSearch.isEmpty ? "clipboard" : "search", 24).foregroundStyle(theme.text3)
                     Text(state.ui.clipSearch.isEmpty ? "剪贴板还是空的" : "没有匹配的复制记录")
-                        .font(.system(size: 12)).foregroundStyle(theme.text3)
+                        .font(.app(12)).foregroundStyle(theme.text3)
                     if state.ui.clipSearch.isEmpty {
                         Text("在任何应用里复制文字,都会自动记录到这里")
-                            .font(.system(size: 10)).foregroundStyle(theme.text3.opacity(0.8))
+                            .font(.app(10)).foregroundStyle(theme.text3.opacity(0.8))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -681,21 +697,19 @@ struct MaccyClipboardList: View {
                                 .overlay(RoundedRectangle(cornerRadius: 3)
                                     .strokeBorder(theme.border, lineWidth: 0.5))
                         } else {
-                            Image(systemName: "photo")
-                                .font(.system(size: 12)).foregroundStyle(theme.text3)
+                            AppIcon("file", 13).foregroundStyle(theme.text3)
                         }
                     } else if let img = AppIconCache.icon(forBundle: e.sourceBundle) {
                         Image(nsImage: img).resizable().frame(width: 16, height: 16)
                     }
                     if !e.isImage {
                         Text(e.text.replacingOccurrences(of: "\n", with: " "))
-                            .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
+                            .font(.app(12)).lineLimit(1).truncationMode(.tail)
                             .foregroundStyle(theme.text)
                     }
                     Spacer(minLength: 0)
                     if e.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 9)).foregroundStyle(theme.accent)
+                        AppIcon("pin", 10).foregroundStyle(theme.accent)
                     }
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
@@ -709,7 +723,7 @@ struct MaccyClipboardList: View {
                            : (hovered ? Color.primary.opacity(0.06) : Color.clear)))
         .overlay(alignment: .trailing) {
             HStack(spacing: 2) {
-                hoverButton(e.isPinned ? "pin.slash" : "pin",
+                hoverButton("pin",
                             e.isPinned ? "取消固定" : "固定") { clips.togglePin(e.id) }
                 hoverButton("trash", "删除") { clips.remove(e.id) }
             }
@@ -731,8 +745,7 @@ struct MaccyClipboardList: View {
     private func hoverButton(_ symbol: String, _ tip: String,
                              action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 9)).foregroundStyle(theme.text2)
+            AppIcon(symbol, 10).foregroundStyle(theme.text2)
                 .padding(4)
                 .background(Circle().fill(theme.bg.opacity(0.92)))
         }
@@ -822,7 +835,7 @@ struct PasswordsTab: View {
                         Button {
                             state.ui.vaultPassword = PasswordGenerator.generate()
                         } label: {
-                            Image(systemName: "wand.and.stars").foregroundStyle(theme.accent)
+                            AppIcon("wand", 16).foregroundStyle(theme.accent)
                         }
                         .buttonStyle(.plain).help("生成随机强密码")
                     }
@@ -840,17 +853,17 @@ struct PasswordsTab: View {
                     }
                 }
                 .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
+                .font(.app(12))
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 12).fill(theme.card))
             }
 
             if let toast = state.ui.vaultToast {
-                Text(toast).font(.system(size: 11)).foregroundStyle(.green)
+                Text(toast).font(.app(11)).foregroundStyle(.green)
             }
 
             if store.entries.isEmpty {
-                Text("暂无保存的密码").font(.system(size: 12)).foregroundStyle(theme.text3)
+                Text("暂无保存的密码").font(.app(12)).foregroundStyle(theme.text3)
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             }
             ForEach(store.entries) { e in
@@ -866,28 +879,27 @@ struct PasswordsTab: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(state.settings.themeIsDark ? theme.accent.opacity(0.18) : Color(hex: 0xDDEBFF))
-                    Image(systemName: "key.fill").font(.system(size: 15)).foregroundStyle(theme.accent)
+                    AppIcon("lock", 16).foregroundStyle(theme.accent)
                 }
                 .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(e.site).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.text)
-                    Text(e.account).font(.system(size: 11)).foregroundStyle(theme.text2)
+                    Text(e.site).font(.app(13, weight: .semibold)).foregroundStyle(theme.text)
+                    Text(e.account).font(.app(11)).foregroundStyle(theme.text2)
                 }
                 Spacer(minLength: 0)
 
                 if state.ui.vaultRevealFor == e.id, let text = state.ui.vaultRevealText {
-                    Text(text).font(.system(size: 11, design: .monospaced)).foregroundStyle(theme.text)
+                    Text(text).font(.app(11, design: .monospaced)).foregroundStyle(theme.text)
                         .lineLimit(1).truncationMode(.middle).frame(maxWidth: 120)
                 }
 
                 if !hasPassword(e) {
-                    Text("未保存密码").font(.system(size: 9)).foregroundStyle(.orange)
+                    Text("未保存密码").font(.app(9)).foregroundStyle(.orange)
                 }
 
                 Button { authenticateAndReveal(e) } label: {
-                    Image(systemName: state.ui.vaultRevealFor == e.id ? "eye.slash" : "eye")
-                        .font(.system(size: 13)).foregroundStyle(theme.text2)
+                    AppIcon("eye", 14).foregroundStyle(theme.text2)
                 }
                 .buttonStyle(.plain).help(hasPassword(e) ? "查看(需验证)" : "该条目添加时未填密码")
             }
@@ -895,7 +907,7 @@ struct PasswordsTab: View {
             if state.ui.vaultEditingFor == e.id {
                 HStack {
                     SecureField("重新输入密码", text: state.uiBind(\.vaultEditPassword))
-                        .textFieldStyle(.roundedBorder).font(.system(size: 12))
+                        .textFieldStyle(.roundedBorder).font(.app(12))
                     Button("保存") {
                         try? store.updatePassword(e.id, state.ui.vaultEditPassword)
                         state.ui.vaultEditingFor = nil
@@ -910,7 +922,9 @@ struct PasswordsTab: View {
         .contextMenu {
             Button("右键编辑重新输入密码") { state.ui.vaultEditingFor = e.id }
             Divider()
-            Button("删除这条记录", role: .destructive) { store.remove(e.id) }
+            Button("删除这条记录", role: .destructive) {
+                state.ui.deleteRequest = DeleteRequest(kind: "密码", title: e.site) { store.remove(e.id) }
+            }
         }
     }
 

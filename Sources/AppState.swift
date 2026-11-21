@@ -90,14 +90,15 @@ enum PanelTab: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    /// iconfont 图标名(见 IconFont.swift;与 Windows 版 icons.js 同名)
+    var iconName: String {
         switch self {
-        case .todo: return "checklist"
-        case .notes: return "note.text"
-        case .downloads: return "arrow.down.circle"
-        case .shelf: return "tray.and.arrow.down"
-        case .passwords: return "key"
-        case .clipboard: return "doc.on.clipboard"
+        case .todo: return "todo"
+        case .notes: return "note"
+        case .downloads: return "download"
+        case .shelf: return "shelf"
+        case .passwords: return "lock"
+        case .clipboard: return "clipboard"
         }
     }
 }
@@ -201,6 +202,9 @@ struct Settings: Codable {
 
 // 瞬时 UI 状态(工具链无 SwiftUI 宏插件,集中放常驻 ObservableObject)
 final class UIState: ObservableObject {
+    // 删除确认弹框(右键删除待办/笔记/密码前弹出;面板内 overlay,见 ConfirmOverlay)
+    @Published var deleteRequest: DeleteRequest?
+
     // 把手 / 拖放
     @Published var handleHovering = false
     @Published var handleDropTargeted = false
@@ -239,6 +243,28 @@ final class UIState: ObservableObject {
     @Published var hotkeyRecording = false
     var hotkeyMonitor: Any?
     var clipKeyMonitor: Any?
+
+    /// 界面缩放系数:面板宽 / 设计基准宽(472),0.8~1.8(与 Windows 版同规则)
+    static var uiScale: CGFloat {
+        let w = CGFloat(AppState.shared.settings.panelWidth)
+        return min(max(w / 472, 0.8), 1.8)
+    }
+}
+
+/// 删除确认请求(回调在确认时执行删除)
+struct DeleteRequest: Identifiable {
+    let id = UUID()
+    let kind: String        // "待办" / "笔记" / "密码"
+    let title: String       // 展示名(标题 / 站点)
+    let onConfirm: () -> Void
+}
+
+/// 字体随面板宽度自适应:统一走 .app(),内部乘 UIState.uiScale。
+/// 设计尺寸即原稿 pt 值,面板越宽字越大(0.8~1.8),与 Windows 版一致。
+extension Font {
+    static func app(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: size * UIState.uiScale, weight: weight, design: design)
+    }
 }
 
 final class AppState: ObservableObject {

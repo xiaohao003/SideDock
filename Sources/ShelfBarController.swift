@@ -60,12 +60,10 @@ struct ShelfBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.stack.3d.up")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.9))
+            AppIcon("shelf", 14).foregroundStyle(.white.opacity(0.9))
             if store.items.isEmpty {
                 Text("拖文件到这里")
-                    .font(.system(size: 11))
+                    .font(.app(11))
                     .foregroundStyle(.white.opacity(0.75))
             } else {
                 ForEach(store.items.prefix(6)) { item in
@@ -74,7 +72,7 @@ struct ShelfBarView: View {
                             .resizable().frame(width: 22, height: 22)
                         Text(item.url.lastPathComponent)
                             .lineLimit(1)
-                            .font(.system(size: 11))
+                            .font(.app(11))
                             .foregroundStyle(.white)
                             .frame(maxWidth: 110)
                     }

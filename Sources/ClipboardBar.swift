@@ -148,17 +148,13 @@ struct ClipboardPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(theme.accent)
-                Text("剪贴板").font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.text)
+                AppIcon("clipboard", 14).foregroundStyle(theme.accent)
+                Text("剪贴板").font(.app(14, weight: .semibold)).foregroundStyle(theme.text)
                 Spacer()
                 Button {
                     onClose()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(theme.text3)
+                    AppIcon("x", 10).foregroundStyle(theme.text3)
                         .padding(5)
                         .background(Circle().fill(theme.pill))
                 }

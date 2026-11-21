@@ -447,6 +447,7 @@ struct PanelBody: View {
                 .fill(theme.bg)
                 .shadow(color: .black.opacity(0.28), radius: 18, x: -3, y: 4)
         )
+        .overlay(ConfirmOverlay(state: state))
         // 边缘/角缩放已由宿主视图(SideDockHostingView)的 8 向边带统一处理,
         // 旧 SwiftUI ResizeEdge/ResizeCorner 覆盖条与边带抢事件且角部数学不对,移除
     }
@@ -465,34 +466,28 @@ struct PanelHeader: View {
             SDLogo()
                 .frame(width: 34, height: 34)
             VStack(alignment: .leading, spacing: 1) {
-                Text(weekdayText).font(.system(size: 12)).foregroundStyle(theme.text2)
-                Text(dateText).font(.system(size: 20, weight: .bold)).foregroundStyle(theme.text)
+                Text(weekdayText).font(.app(12)).foregroundStyle(theme.text2)
+                Text(dateText).font(.app(20, weight: .bold)).foregroundStyle(theme.text)
             }
             Spacer(minLength: 0)
             Button {
                 NotificationCenter.default.post(name: .sideDockOpenSettings, object: nil)
             } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 15))
-                    .foregroundStyle(theme.text2)
+                AppIcon("gear", 16).foregroundStyle(theme.text2)
             }
             .buttonStyle(.plain)
             .help("设置")
             Button {
                 state.settings.pinned.toggle()
             } label: {
-                Image(systemName: state.settings.pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 15))
-                    .foregroundStyle(state.settings.pinned ? theme.text : theme.text2)
+                AppIcon("pin", 16).foregroundStyle(state.settings.pinned ? theme.text : theme.text2)
             }
             .buttonStyle(.plain)
             .help(state.settings.pinned ? "常驻模式(已固定,不自动收起)" : "点击固定面板")
             Button {
                 controller.collapse()
             } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(theme.text2)
+                AppIcon("chevron", 15).foregroundStyle(theme.text2)
             }
             .buttonStyle(.plain)
             .help("收起侧边栏")
@@ -529,7 +524,7 @@ struct SDLogo: View {
             RoundedRectangle(cornerRadius: 9)
                 .fill(LinearGradient(colors: [Color(hex: 0x4A9EFF), Color(hex: 0x2F7BFF)],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
-            Text("SD").font(.system(size: 12, weight: .heavy, design: .rounded)).foregroundStyle(.white)
+            Text("SD").font(.app(12, weight: .heavy, design: .rounded)).foregroundStyle(.white)
         }
     }
 }
@@ -548,12 +543,12 @@ struct PanelTabBar: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
-                    tabButton(.todo, badge: pendingTodoCount)
-                    tabButton(.notes, badge: nil)
-                    tabButton(.downloads, badge: nil)
-                    tabButton(.shelf, badge: state.shelf.items.count)
-                    tabButton(.passwords, badge: state.vault.entries.count)
-                    tabButton(.clipboard, badge: state.clipboard.entries.count)
+                    tabButton(.todo)
+                    tabButton(.notes)
+                    tabButton(.downloads)
+                    tabButton(.shelf)
+                    tabButton(.passwords)
+                    tabButton(.clipboard)
                 }
             }
             .onChange(of: state.settings.tab) { tab in
@@ -562,27 +557,16 @@ struct PanelTabBar: View {
         }
     }
 
-    private var pendingTodoCount: Int {
-        state.todos.items.filter { !$0.done }.count
-    }
-
     @ViewBuilder
-    private func tabButton(_ tab: PanelTab, badge: Int?) -> some View {
+    private func tabButton(_ tab: PanelTab) -> some View {
         let selected = state.settings.tab == tab
         Button {
             state.settings.tab = tab
         } label: {
                 HStack(spacing: 3) {
-                Image(systemName: tab.symbol).font(.system(size: 10, weight: .medium))
-                Text(tab.title).font(.system(size: 11, weight: selected ? .semibold : .regular))
+                AppIcon(tab.iconName, 12)
+                Text(tab.title).font(.app(11, weight: selected ? .semibold : .regular))
                     .lineLimit(1).fixedSize()
-                if let badge, badge > 0 {
-                    Text("\(badge)")
-                        .font(.system(size: 8, weight: .bold))
-                        .frame(width: 13, height: 13)
-                        .background(Circle().fill(Color.white.opacity(0.92)))
-                        .foregroundStyle(theme.accent)
-                }
             }
             .fixedSize()
             .padding(.horizontal, 8).padding(.vertical, 4)
@@ -620,7 +604,7 @@ struct MusicCard: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(LinearGradient(colors: [Color(hex: 0x4A9EFF), Color(hex: 0x2F7BFF)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-                                Image(systemName: "music.note").foregroundStyle(.white).font(.system(size: 20))
+                                AppIcon("musicnote", 22).foregroundStyle(.white)
                             }
                         }
                     }
@@ -628,11 +612,11 @@ struct MusicCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(snap.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.text)
+                        Text(snap.title).font(.app(15, weight: .semibold)).foregroundStyle(theme.text)
                             .lineLimit(1)
                         Text([snap.artist, snap.album].filter { !$0.isEmpty }.joined(separator: " — "))
-                            .font(.system(size: 12)).foregroundStyle(theme.text2).lineLimit(1)
-                        Text(snap.app).font(.system(size: 11)).foregroundStyle(theme.text3)
+                            .font(.app(12)).foregroundStyle(theme.text2).lineLimit(1)
+                        Text(snap.app).font(.app(11)).foregroundStyle(theme.text3)
                     }
                     Spacer(minLength: 0)
                 }
@@ -646,32 +630,31 @@ struct MusicCard: View {
                 }
                 .frame(height: 4)
                 HStack {
-                    Text(timeString(snap.elapsed)).font(.system(size: 10)).foregroundStyle(theme.text3)
+                    Text(timeString(snap.elapsed)).font(.app(10)).foregroundStyle(theme.text3)
                     Spacer()
                     // 渲染证据:右侧时间 = 曲目总时长(无负号)
-                    Text(timeString(max(0, snap.duration))).font(.system(size: 10)).foregroundStyle(theme.text3)
+                    Text(timeString(max(0, snap.duration))).font(.app(10)).foregroundStyle(theme.text3)
                 }
                 HStack(spacing: 56) {
                     Button { music.send(.previous) } label: {
-                        Image(systemName: "backward.fill").font(.system(size: 16)).foregroundStyle(theme.text)
+                        AppIcon("prev", 17).foregroundStyle(theme.text)
                     }
                     Button { music.send(.toggle) } label: {
-                        Image(systemName: snap.playing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 20)).foregroundStyle(theme.text)
+                        AppIcon(snap.playing ? "pause" : "play", 20).foregroundStyle(theme.text)
                     }
                     Button { music.send(.next) } label: {
-                        Image(systemName: "forward.fill").font(.system(size: 16)).foregroundStyle(theme.text)
+                        AppIcon("next", 17).foregroundStyle(theme.text)
                     }
                 }
                 .buttonStyle(.plain)
             } else {
                 HStack(spacing: 8) {
-                    Image(systemName: "music.note").font(.system(size: 12)).foregroundStyle(theme.text3)
+                    AppIcon("musicnote", 13).foregroundStyle(theme.text3)
                     Text("在任意播放器开始播放即可显示")
-                        .font(.system(size: 11)).foregroundStyle(theme.text3)
+                        .font(.app(11)).foregroundStyle(theme.text3)
                     Spacer()
                     Button { music.openPlayingApp() } label: {
-                        Image(systemName: "arrow.up.forward.app").font(.system(size: 12))
+                        AppIcon("arrowUp", 13)
                             .foregroundStyle(theme.text3)
                     }
                     .buttonStyle(.plain)
@@ -694,4 +677,62 @@ struct MusicCard: View {
 extension Notification.Name {
     static let sideDockGeometryReset = Notification.Name("sideDockGeometryReset")
     static let sideDockOpenSettings = Notification.Name("sideDockOpenSettings")
+}
+
+// MARK: 删除确认弹框(右键删除待办/笔记/密码;面板内 overlay,不激活系统弹窗)
+
+struct ConfirmOverlay: View {
+    @ObservedObject var state: AppState
+
+    private var theme: ThemeColors { Theme.colors(dark: state.settings.themeIsDark) }
+
+    var body: some View {
+        if let req = state.ui.deleteRequest {
+            ZStack {
+                Color.black.opacity(0.30)
+                    .contentShape(Rectangle())
+                    .onTapGesture { state.ui.deleteRequest = nil }
+                VStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(theme.danger.opacity(0.14))
+                        AppIcon("trash", 18).foregroundStyle(theme.danger)
+                    }
+                    .frame(width: 40, height: 40)
+                    Text("删除\(req.kind)").font(.app(14, weight: .semibold)).foregroundStyle(theme.text)
+                    Text("确定删除「\(req.title)」吗?")
+                        .font(.app(12)).foregroundStyle(theme.text2)
+                        .multilineTextAlignment(.center)
+                    Text("删除后无法恢复。").font(.app(10)).foregroundStyle(theme.text3)
+                    HStack(spacing: 8) {
+                        Button {
+                            state.ui.deleteRequest = nil
+                        } label: {
+                            Text("取消").font(.app(12))
+                                .padding(.horizontal, 20).padding(.vertical, 6)
+                                .background(Capsule().fill(theme.pill))
+                                .foregroundStyle(theme.text)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            req.onConfirm()
+                            state.ui.deleteRequest = nil
+                        } label: {
+                            Text("删除").font(.app(12, weight: .semibold))
+                                .padding(.horizontal, 20).padding(.vertical, 6)
+                                .background(Capsule().fill(theme.danger))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(.horizontal, 20).padding(.vertical, 18)
+                .frame(maxWidth: 320)
+                .background(RoundedRectangle(cornerRadius: 14)
+                    .fill(theme.bg)
+                    .shadow(color: .black.opacity(0.32), radius: 18, y: 6))
+            }
+            .transition(.opacity)
+        }
+    }
 }
