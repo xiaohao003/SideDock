@@ -416,21 +416,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 菜单栏图标(模板图:系统只取 alpha 通道后按菜单栏深浅着色,颜色信息被忽略)。
-    /// 旧实现用白色画把手 —— 白色在模板图里同样是不透明像素,整个图标糊成一块实心圆角块;
-    /// 现在面板与把手分两块绘制,中间留 1.5pt 透明缝,图案才出得来。
-    /// 各边落在整/半像素上,1x 显示器上缝隙与把手也清晰(实测 1x 菜单栏渲染)。
+    /// 一整块实心徽章,靠右用一条贯穿的透明竖缝分成「面板 + 把手」两块,即 SideDock 的形态。
+    /// 做成 20pt 的实心大块是为了醒目(细线条式小图标在菜单栏里不显眼);各边落在整/半像素上,
+    /// 1x 显示器上竖缝与把手也清晰(实测 1x 菜单栏渲染)。
     static func sidebarTemplateIcon() -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+        let image = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { _ in
             NSColor.black.setFill()
-            // 面板(左)
-            NSBezierPath(roundedRect: NSRect(x: 3, y: 3, width: 7.5, height: 12),
-                         xRadius: 2.5, yRadius: 2.5).fill()
-            // 把手(右)
-            NSBezierPath(roundedRect: NSRect(x: 12, y: 3, width: 3, height: 12),
-                         xRadius: 1.5, yRadius: 1.5).fill()
+            NSBezierPath(roundedRect: NSRect(x: 0.5, y: 0.5, width: 19, height: 19),
+                         xRadius: 5, yRadius: 5).fill()
+            // 竖缝:从徽章里抠掉(模板图里只有透明才算镂空,画白色是没用的)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            NSBezierPath(rect: NSRect(x: 13.5, y: 0, width: 1.5, height: 20)).fill()
+            NSGraphicsContext.restoreGraphicsState()
             return true
         }
         image.isTemplate = true
+        image.accessibilityDescription = "SideDock"
         return image
     }
 }
