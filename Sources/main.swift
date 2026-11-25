@@ -312,6 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = Self.sidebarTemplateIcon()
         item.button?.image?.isTemplate = true
+        item.button?.toolTip = "SideDock"
 
         let menu = NSMenu()
         menu.addItem(withTitle: "展开 / 收起侧边栏", action: #selector(toggleSidebar), keyEquivalent: "")
@@ -414,17 +415,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 菜单栏图标(模板图:系统只取 alpha 通道后按菜单栏深浅着色,颜色信息被忽略)。
+    /// 旧实现用白色画把手 —— 白色在模板图里同样是不透明像素,整个图标糊成一块实心圆角块;
+    /// 现在面板与把手分两块绘制,中间留 1.5pt 透明缝,图案才出得来。
+    /// 各边落在整/半像素上,1x 显示器上缝隙与把手也清晰(实测 1x 菜单栏渲染)。
     static func sidebarTemplateIcon() -> NSImage {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.black.setFill()
-        let body = NSBezierPath(roundedRect: NSRect(x: 4, y: 3, width: 10, height: 12), xRadius: 2.5, yRadius: 2.5)
-        body.fill()
-        NSColor.white.setFill()
-        let handle = NSBezierPath(roundedRect: NSRect(x: 11.5, y: 3, width: 2.5, height: 12), xRadius: 1.2, yRadius: 1.2)
-        handle.fill()
-        image.unlockFocus()
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            NSColor.black.setFill()
+            // 面板(左)
+            NSBezierPath(roundedRect: NSRect(x: 3, y: 3, width: 7.5, height: 12),
+                         xRadius: 2.5, yRadius: 2.5).fill()
+            // 把手(右)
+            NSBezierPath(roundedRect: NSRect(x: 12, y: 3, width: 3, height: 12),
+                         xRadius: 1.5, yRadius: 1.5).fill()
+            return true
+        }
         image.isTemplate = true
         return image
     }
